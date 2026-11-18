@@ -448,6 +448,8 @@ def main():
             done[c["id"]] = {"t": now().timestamp(), "結論": "GO確認待ち"}
         if live and r.get("出品") and c.get("_approved"):
             mgo.pop(c["id"], None)
+        if live and r["結論"] == "エラー" and re.search(r"already have on eBay|item specific .* is missing|duplicate", str(r.get("理由", "")), re.I):
+            r["結論"] = "見送り"   # eBay が重複・必須の項目で止めた品は、毎時やり直さない（同じエラーで枠を使わない）
         if live and r["結論"] in ("GO", "見送り", "人に返す") and (r["結論"] != "GO" or r.get("出品")):   # 影の運転の間は記録しない（GAS に今までどおり送る）
             done[c["id"]] = {"t": r["t"], "結論": r["結論"]}
         time.sleep(0.5)
