@@ -161,7 +161,13 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
     asp = [["Brand", brand], ["Model", model]] + [[k, "Does not apply"] for k in kind["項目"]] + \
           [["Shipping Method", "FedEx International Connect Plus (tracked)"]]
     w, (l, wd, h) = kind["重さ_g"], sorted([float(x) for x in kind["箱"].split("x")], reverse=True)
-    pol = kind.get("ポリシー") or {}
+    pol = dict(kind.get("ポリシー") or {})
+    if re.search(r"netmall\.hardoff\.co\.jp|ec\.treasure-f\.com", c.get("url", "")):   # 発送まで日数がかかる店：発送10営業日（11/18 21:46 オーナー）
+        p10 = load_json(os.path.join(ROOT, "data", "判定", "発送10日のポリシー.json"), {}).get("id")
+        if not p10:
+            raise RuntimeError("発送10日のポリシーがまだ無い（policy_10d.py）")
+        pol["発送"] = p10
+        html = html.replace("3 business days", "10 business days")
     pl = {"sku": sku, "title": title, "description": html, "categoryId": cat, "conditionId": cond, "aspects": asp,
           "imageUrls": c.get("_photos") or photos_of(c), "quantity": 1, "price": price, "ean": "",
           "policies": {"fulfillment": pol.get("発送", "327189638011"), "payment": pol.get("支払い", "318927569011"),
@@ -406,8 +412,11 @@ def main():
                                     r.update(結論="エラー", 理由="写真を eBay に上げられない：" + err_text(e)[:300] if isinstance(e, EbayError) else str(e)[:300])
                             if r["結論"] == "GO" and live and len(listed) < n_list and not listing_limit_stopped():
                                 sku = next_sku(c, 0)
-                                pl = make_payload(c, kind, cat, cond, price, fp, ship, sku)
-                                item, offer, why = build(pl, loc)
+                                try:
+                                    pl = make_payload(c, kind, cat, cond, price, fp, ship, sku)
+                                    item, offer, why = build(pl, loc)
+                                except RuntimeError as e:
+                                    item, why = None, str(e)
                                 if not item:
                                     r.update(結論="エラー", 理由="出品データが足りない：" + why)
                                 else:
