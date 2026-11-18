@@ -303,11 +303,24 @@ def main():
     back = load_json(os.path.join(ROOT, "data", "店の地引網", "送る待ち.json"), []) + \
         load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), []) + (gas_cands() if tt.get("GASにv667") else []) + \
         load_json(os.path.join(ROOT, "data", "人の候補", "送る待ち.json"), [])   # メルカリ：人が集めた候補（教科書 第18章。プログラムはメルカリを開かない）
+    # メルカリ（メール・ブラウザで集めた品）は、オーナーがGOを出した品だけ出品する（11/18 21:45 オーナー「メルカリはこれをやって」）
+    import glob as _glob
+    mgo_p = os.path.join(ROOT, "data", "判定", "メルカリGO待ち.json")
+    mgo = {k: v for k, v in load_json(mgo_p, {}).items() if v.get("t", 0) >= now().timestamp() - 7 * 86400}
+    approved, ans_files = set(), []
+    for f in sorted(_glob.glob(os.path.join(ROOT, "data", "答え", "*.json"))):
+        a = load_json(f, {})
+        if a.get("種類") == "メルカリGO":
+            approved |= {str(x) for x in (a.get("商品") or [])}
+            ans_files.append(f)
+    for k, v in mgo.items():
+        if v.get("商品") in approved:
+            back.append(dict(v["候補"], _approved=True))
     # 同じ型番は一番安い1品。判定済み・出品中の型番は飛ばす
     best = {}
-    for c in sorted(back, key=lambda c: c["price"]):
+    for c in sorted(back, key=lambda c: (not c.get("_approved"), c["price"])):
         k = mkey(c["型番"])
-        if c["id"] in done or k in best or len(k) < 4 or not re.search(r"\d", k):
+        if (c["id"] in done and not c.get("_approved")) or k in best or len(k) < 4 or not re.search(r"\d", k):
             continue
         best[k] = c
     todo = list(best.values())[: int(tt.get("1回に判定する上限_件", 40))]
@@ -381,6 +394,11 @@ def main():
                         else:
                             r.update(結論="GO")
                             live_models.append(k)
+                            mid = (re.search(r"mercari\.com/item/(m\d+)", c["url"]) or [None, ""])[1]
+                            if mid and not str(c["id"]).startswith("人:") and not c.get("_approved"):
+                                r.update(結論="GO確認待ち", 理由="メルカリはオーナーのGOで出品")
+                                mgo[c["id"]] = {"t": now().timestamp(), "商品": mid, "型番": c["型番"], "仕入値": c["price"], "値段": price, "利益": py, "url": c["url"],
+                                                "候補": {kk: vv for kk, vv in c.items() if not kk.startswith("_")}}
                             if live and len(listed) < n_list and not listing_limit_stopped() and c.get("写真ファイル") and not c.get("_photos"):
                                 try:
                                     c["_photos"] = [eb.upload_image(os.path.join(ROOT, f)) for f in c["写真ファイル"][:12]]
@@ -417,6 +435,10 @@ def main():
         res.append(r)
         if str(c.get("id", "")).startswith("人:") and r["結論"] == "GASへ":
             r["結論"] = "人に返す"
+        if live and r["結論"] == "GO確認待ち":
+            done[c["id"]] = {"t": now().timestamp(), "結論": "GO確認待ち"}
+        if live and r.get("出品") and c.get("_approved"):
+            mgo.pop(c["id"], None)
         if live and r["結論"] in ("GO", "見送り", "人に返す") and (r["結論"] != "GO" or r.get("出品")):   # 影の運転の間は記録しない（GAS に今までどおり送る）
             done[c["id"]] = {"t": r["t"], "結論": r["結論"]}
         time.sleep(0.5)
@@ -446,6 +468,12 @@ def main():
         except Exception as e:
             gas_note = "GASへの知らせに失敗：" + str(e)[:200]
     save_json(done_p, done)
+    save_json(mgo_p, mgo)
+    if live and ans_files:   # 取り込んだ GO の答え（出品できた・できなかったに関わらず）は取り込み済みへ
+        import shutil as _sh
+        os.makedirs(os.path.join(ROOT, "data", "答え", "取り込み済み"), exist_ok=True)
+        for f in ans_files:
+            _sh.move(f, os.path.join(ROOT, "data", "答え", "取り込み済み", os.path.basename(f)))
     save_json(os.path.join(ROOT, "data", "判定", "記録", now().strftime("%Y%m%d_%H%M%S") + ".json"),
               {"時刻": jst(), "本番": live, "Browseの残り": rem.get("remaining"), "結果": res})
     cnt = collections.Counter(x["結論"] for x in res)
@@ -457,6 +485,11 @@ def main():
     hum = [x for x in res if str(x.get("id", "")).startswith("人:")]
     if hum:
         msg.append("メルカリ・Amazon（あなたが送った品）：" + " / ".join("%s %s%s" % (x["型番"], x["結論"], "（%s）" % x.get("理由", "")[:40] if x.get("理由") else "") for x in hum[:10]))
+    new_wait = [x for x in res if x.get("結論") == "GO確認待ち"]
+    if new_wait:
+        msg.append("【メルカリのGO確認】まだ売っているか確かめて、出すなら「メルカリGO 番号」と Claude に（番号は m から始まる商品番号）：\n" + "\n".join(
+            "・%s %s 仕入 %s円 → $%.2f 利益 %s円 %s" % (mgo[c["id"]]["商品"], x["型番"], format(int(x["仕入値"]), ","), x.get("値段") or 0, format(int(x.get("利益") or 0), ","), x["url"])
+            for x in new_wait for c in [next(cc for cc in todo if cc["id"] == x["id"])]))
     if listed:
         msg.append("出品した %d品：" % len(listed) + "・".join("%s $%.2f" % (t[:40], p) for _, _, t, p in listed[:10]))
         if not tt.get("カナリア済み"):
