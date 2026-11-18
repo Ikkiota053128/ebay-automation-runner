@@ -28,4 +28,5 @@ b = {"60日以上": [i for i in items if (i["日数"] or 0) >= 60], "30〜59日"
 save_json(os.path.join(ROOT, "data", "上限", "売れていない出品.json"), {"時刻": jst(), "出品中": len(items), "合計ドル": round(sum(i["値段"] for i in items), 2), "在庫1以上": sum(1 for i in items if i["在庫"] > 0),
           "在庫1以上の合計ドル": round(sum(i["値段"] for i in items if i["在庫"] > 0), 2),
           "60日以上": b["60日以上"], "30〜59日": b["30〜59日"]})
+save_json(os.path.join(ROOT, "data", "上限", "eBayの出品中.json"), {"時刻": jst(), "品": [{k: i[k] for k in ("出品ID", "SKU", "値段", "在庫", "始まり", "ウォッチ", "タイトル")} for i in items]})
 print("ok", len(items), {k: (len(v), round(sum(i["値段"] for i in v))) for k, v in b.items()})
