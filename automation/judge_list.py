@@ -123,7 +123,9 @@ def more_photos(c):
             code, html = fetch(c["url"])
             if code == 200:
                 p = ld_product(html) or {}
-                for u in (p.get("photos") or []) + IMG_RX.findall(html):
+                ho = [u for u in re.findall(r"https://[a-z0-9\-]+\.imageflux\.jp/[^\"'\s)]+\.(?:jpe?g|png|webp)[^\"'\s)]*", html)
+                      if not re.search(r"blankimg|noimage|icon|logo|banner|/portal/", u) and int((re.search(r"w=(\d+)", u) or [0, 9999])[1]) >= 600]
+                for u in (p.get("photos") or []) + IMG_RX.findall(html) + ho:
                     if u.startswith("https://") and u not in ph:
                         ph.append(u)
         except Exception:
@@ -217,7 +219,7 @@ def next_sku(c, n):
     d = load_json(p, {"n": 0})
     d["n"] = int(d["n"]) + 1
     save_json(p, d)
-    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF"}.get(c["src"], "ST")
+    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO"}.get(c["src"], "ST")
     return "G%s-%06d" % (code, d["n"])
 
 

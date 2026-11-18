@@ -24,6 +24,48 @@ STORES = [
 ]
 
 
+HO_CATES = [("デジタル・フィルムカメラ", "000100030002"), ("交換レンズ", "000100030001"), ("ギター・ベース周辺機器", "000100050010"),
+            ("単品オーディオ", "000100010001"), ("腕時計", "000500010001")]
+
+
+def hardoff_cates(models, seen, stat, why, gap):
+    """ハードオフ（オフモール）：検索ページは robots.txt で禁止なので、カテゴリの新着ページ（/cate/<番号>/・許可されている）を見る（GAS の hoCateTick と同じ）"""
+    out = []
+    st = stat.setdefault("ハードオフ", {"検索": 0, "商品ページ": 0, "候補": 0, "読めない": 0})
+    from flea_sweep import match
+    for nm, cid in HO_CATES:
+        code, html = fetch("https://netmall.hardoff.co.jp/cate/%s/" % cid)
+        st["検索"] += 1
+        time.sleep(gap)
+        if code != 200:
+            st["読めない"] += 1
+            continue
+        for part in html.split('<div class="itemcolmn_item')[1:]:
+            m_id = re.search(r"netmall\.hardoff\.co\.jp/product/(\d+)/", part)
+            if not m_id:
+                continue
+            g = lambda cls: re.sub(r"<[^>]+>|\s+", " ", (re.search(r'class="' + cls + r'"[^>]*>([\s\S]*?)</div>', part) or [None, ""])[1]).strip()
+            name = " ".join(x for x in (g("item-brand-name"), g("item-name"), g("item-code")) if x)
+            price = int((re.search(r"item-price-en[^>]*>\s*([\d,]+)", part) or [None, "0"])[1].replace(",", "") or 0)
+            url = "https://netmall.hardoff.co.jp/product/%s/" % m_id.group(1)
+            key = "ハードオフ:" + url
+            if key in seen or re.search(r"sold|売り切れ|SOLD OUT", part, re.I):
+                continue
+            seen[key] = now().timestamp()
+            m = match(name, models)
+            if not m:
+                continue
+            it = {"id": key, "title": name, "price": price, "url": url, "photos": [u for u in re.findall(r'<img[^>]+src="(https://[^"]*imageflux\.jp[^"]+)"', part)][:1]}
+            r = keep(it, m)
+            if r:
+                why[r] = why.get(r, 0) + 1
+                continue
+            it.update({"型番": m["model"], "メーカー": m["maker"], "src": "ハードオフ", "cap": m["cap"]})
+            out.append(it)
+            st["候補"] += 1
+    return out
+
+
 def ld_product(html):
     """JSON-LD の Product から（名前・値段・在庫・写真）"""
     for b in re.findall(r"<script[^>]+application/ld\+json[^>]*>([\s\S]*?)</script>", html, re.I):
@@ -114,6 +156,10 @@ def main():
                 it.update({"型番": m["model"], "メーカー": m["maker"], "src": s["name"], "cap": m["cap"]})
                 cands.append(it)
                 st["候補"] += 1
+    try:
+        cands += hardoff_cates(models, seen, stat, why, gap)
+    except Exception as e:
+        why["ハードオフを読めなかった：%s" % type(e).__name__] = 1
     save_json(seen_p, seen)
     save_json(cur_p, cur)
     # 本番：候補を「送る待ち」に入れる → GitHub の判定と出品（judge_list.py）が判定して出品する。GitHub が扱えない品だけ、判定と出品が GAS へ送る
