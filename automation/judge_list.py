@@ -212,7 +212,7 @@ def main():
                                         errs.append((sku, et))
         r["t"] = now().timestamp()
         res.append(r)
-        if r["結論"] != "GASへ" and r["結論"] != "エラー":
+        if live and r["結論"] in ("GO", "見送り") and (r["結論"] == "見送り" or r.get("出品")):   # 影の運転の間は記録しない（GAS に今までどおり送る）
             done[c["id"]] = {"t": r["t"], "結論": r["結論"]}
         time.sleep(0.5)
     if rows:
