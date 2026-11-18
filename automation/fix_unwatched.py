@@ -28,7 +28,7 @@ def main():
     mark_started(NAME)
     cfg = settings()
     eb = Ebay()
-    items = load_json(os.path.join(ROOT, "data", "上限", "eBayの出品中.json"), {}).get("品", [])
+    items = list({i["出品ID"]: i for i in load_json(os.path.join(ROOT, "data", "上限", "eBayの出品中.json"), {}).get("品", [])}.values())   # 同じ出品IDは1つに
     led = read_ledger()
     by_id = collections.defaultdict(list)
     for r in led:

@@ -17,6 +17,7 @@ while True:
     if page >= tp:
         break
     page += 1
+items = list({i["出品ID"]: i for i in items}.values())   # ページの読み直しで同じ品が何度も返ることがある → 出品IDで1つに
 today = now().date()
 for it in items:
     try:
