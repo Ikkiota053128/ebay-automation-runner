@@ -14,6 +14,35 @@ def main():
     p = os.path.join(ROOT, "data", "判定", "送料表.json")
     st = load_json(p, {})
     old = (st.get("FedEx") or {}).get("燃油")
+    # 1) GAS の正式シートの率（v669 page=ghrates）。GAS が FedEx の週ごとの率・割増・割引を持っている
+    try:
+        import json as _j, urllib.parse, urllib.request
+        url, tok = os.environ.get("GAS_WEBAPP_URL", "").strip(), os.environ.get("GAS_SEND_TOKEN", "").strip()
+        if url and tok:
+            g = _j.loads(urllib.request.urlopen(urllib.request.Request(url + "?" + urllib.parse.urlencode({"page": "ghrates", "token": tok}),
+                                                                      headers={"User-Agent": "ebay-automation"}), timeout=120).read().decode("utf-8"))
+            fx = g.get("fedex") or {}
+            if fx.get("sur") and 0.2 <= float(fx["sur"]) <= 0.8:
+                f = st.setdefault("FedEx", {})
+                ch = []
+                for k, v in (("燃油", float(fx["sur"])), ("割増_500gごと", float(fx.get("per500") or f.get("割増_500gごと", 37)))):
+                    if f.get(k) != v:
+                        ch.append("%s %s→%s" % (k, f.get(k), v))
+                        f[k] = v
+                if fx.get("table") and len(fx["table"]) > 20:
+                    if f.get("表_ゾーンF") != fx["table"]:
+                        ch.append("基本料金の表")
+                        f["表_ゾーンF"] = fx["table"]
+                st["GASから読んだ日時"] = jst()
+                save_json(p, st)
+                msg = "【送料の表】%s GAS（正式シート）から読んだ：燃油 %.2f%%%s" % (jst(), float(fx["sur"]) * 100, ("・直した：" + "、".join(ch)) if ch else "・変わりなし")
+                print(msg)
+                if ch:
+                    notify(msg)
+                write_run(NAME, True, 1, 0)
+                return 0
+    except Exception as e:
+        print("GASの率を読めなかった：", type(e).__name__)
     code, html = fetch(URL)
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", html or "", flags=re.I)))
     i = text.find("燃油")

@@ -29,6 +29,8 @@ jobs:
         env:
           LEDGER_ROOT: ${{ github.workspace }}/data_repo
           NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          GAS_WEBAPP_URL: ${{ secrets.GAS_WEBAPP_URL }}
+          GAS_SEND_TOKEN: ${{ secrets.GAS_SEND_TOKEN }}
         run: |
           mkdir -p data_repo/data/ログ
           rc=0

@@ -21,8 +21,7 @@ def main():
         return 0
     led = read_ledger()
     have = {r["SKU"] for r in led}
-    todo = [r for r in led if r["SKU"].startswith("要付与-") and r.get("状態") == "出品中" and r.get("eBayの出品ID")
-            and not RULE_OUT.search(r.get("タイトル", ""))][:cap]
+    todo = [r for r in led if r["SKU"].startswith("要付与-") and r.get("状態") == "出品中" and r.get("eBayの出品ID")][:cap]
     ok, bad, rows = [], [], []
     for r in todo:
         iid = r["eBayの出品ID"]

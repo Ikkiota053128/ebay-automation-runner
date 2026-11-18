@@ -286,9 +286,24 @@ def gas_get_models():
     try:
         q = url + "?" + urllib.parse.urlencode({"page": "models", "token": tok})
         d = json.loads(urllib.request.urlopen(urllib.request.Request(q, headers={"User-Agent": "ebay-automation"}), timeout=120).read().decode("utf-8"))
-        return with_github_models(d) if d.get("models") else None
+        if d.get("models"):
+            try:   # 写しを残す（GAS が止まっても、GitHub は写しで探し続ける）
+                from common import ROOT as _R, save_json as _sj
+                _sj(os.path.join(_R, "data", "型番リスト", "GASの写し.json"), d)
+            except Exception:
+                pass
+            return with_github_models(d)
+        return None
     except Exception as e:
         print("ツールの型番リストを読めなかった：", type(e).__name__)
+        try:
+            from common import ROOT as _R, load_json as _lj
+            d = _lj(os.path.join(_R, "data", "型番リスト", "GASの写し.json"), {})
+            if d.get("models"):
+                print("型番リストは前の写しを使う")
+                return with_github_models(d)
+        except Exception:
+            pass
         return None
 
 
