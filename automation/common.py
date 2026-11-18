@@ -343,6 +343,15 @@ def save_ledger(rows, my_cols, who):
         os.makedirs(os.path.join(ROOT, "控え"), exist_ok=True)
         shutil.copy(path, os.path.join(ROOT, "控え", "台帳_%s.csv" % now().strftime("%Y%m%d_%H%M%S")))
     mine = {r["SKU"]: r for r in rows}
+    jp = os.environ.get("LEDGER_JOURNAL")
+    if jp:   # 保存の直前に最新の台帳へ当て直すための、この回の変更の記録（ledger_merge.py）
+        try:
+            j = json.load(open(jp, encoding="utf-8")) if os.path.exists(jp) else []
+        except Exception:
+            j = []
+        j.append({"rows": [{k: ("" if v is None else str(v)) for k, v in r.items()} for r in rows], "cols": list(my_cols)})
+        with open(jp, "w", encoding="utf-8") as f:
+            json.dump(j, f, ensure_ascii=False)
     by = {r["SKU"]: r for r in latest}
     for sku, r in mine.items():
         if sku in by:

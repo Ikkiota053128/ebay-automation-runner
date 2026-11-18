@@ -23,6 +23,10 @@ def main():
     have = {r["SKU"] for r in led}
     todo = [r for r in led if r["SKU"].startswith("要付与-") and r.get("状態") == "出品中" and r.get("eBayの出品ID")][:cap]
     ok, bad, rows = [], [], []
+    # 前の回で SKU を付けたのに、古い行が「出品中」のまま残った品（保存のぶつかりで消えた変更）を直す
+    for r in led:
+        if r["SKU"].startswith("要付与-") and r.get("状態") == "出品中" and ("OLD-" + r["SKU"][4:]) in have:
+            rows.append({"SKU": r["SKU"], "状態": "終了", "メモ": (r.get("メモ", "") + "・%s OLD-%s に付け替え済み" % (jst(), r["SKU"][4:]))[:500]})
     for r in todo:
         iid = r["eBayの出品ID"]
         new = "OLD-" + iid
