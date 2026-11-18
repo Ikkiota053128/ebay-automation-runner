@@ -46,6 +46,28 @@ def main():
                                              ("（" + "・".join(s.get("SKU") or "SKUなし" for s in sold[:15]) + "）") if sold else ""))
     if month_line:
         lines.append(month_line)
+    # 古物台帳の突き合わせ（毎月1日・先月）：売れた品の SKU が古物台帳（仕入れ）に記帳されているか。記帳はプログラムだけ（設計書4章）
+    if today_pt.day == 1 or os.environ.get("KOBUTSU_CHECK"):
+        try:
+            import csv as _csv
+            pm = y
+            sold_skus = set()
+            for f in glob.glob(os.path.join(ROOT, "data", "注文の記録", "*.json")):
+                dd = load_json(f, {})
+                try:
+                    t1 = dt.datetime.fromisoformat(dd.get("注文の時刻_UTC", "").replace("Z", "+00:00")).astimezone(PT).date()
+                except Exception:
+                    continue
+                if (t1.year, t1.month) == (pm.year, pm.month) and dd.get("SKU"):
+                    sold_skus.add(dd["SKU"])
+            booked = set()
+            for f in glob.glob(os.path.join(ROOT, "data", "古物台帳", "*.csv")):
+                with open(f, encoding="utf-8") as fh:
+                    booked |= {r.get("SKU", "") for r in _csv.DictReader(fh)}
+            miss = sorted(sold_skus - booked)
+            lines.append("古物台帳の突き合わせ（%d月）：売れた %d品・記帳漏れ %d品%s" % (pm.month, len(sold_skus), len(miss), ("（" + "・".join(miss[:15]) + "）→「SKU 仕入れた」と Claude に") if miss else ""))
+        except Exception as e:
+            lines.append("（古物台帳の突き合わせができなかった：%s）" % type(e).__name__)
     # 2) 出品の数と上限
     led = read_ledger()
     act = [r for r in led if r.get("状態") == "出品中"]
