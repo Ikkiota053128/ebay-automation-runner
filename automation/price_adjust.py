@@ -72,36 +72,18 @@ def clean(items):
 
 
 def cheapest_comp(eb, row, me, my_ids, cfg):
-    """同じ型番・同じ状態・即決・自分を除く・送料込みの一番安い値段。外れ値（中央値の35%未満）とジャンクの言葉は除く。"""
+    """同じ型番・同じ状態・即決・自分を除く・送料込みの「本物の最安」。判定（judge.py）と同じ外し方：
+    付属品・ジャンク・本・外れ値（GAS quotePrice_ の v303・v394・v652：真ん中の半分・35%・65%より安い品、すぐ上より15%安い品）を外す"""
+    import judge
+    from over_check import market
     md = model_of(row.get("タイトル"))
     if not md:
         return None, "型番が読めない"
-    items = eb.browse(md, "buyingOptions:{FIXED_PRICE},conditionIds:{%s}" % cond_filter(row.get("eBayの状態ID")))
-    jcond = int(num(row.get("eBayの状態ID")) or 3000) >= 7000
-    tot = []
-    for it in items:
-        if (it.get("seller") or {}).get("username", "").lower() == me or str(it.get("legacyItemId", "")) in my_ids:
-            continue
-        if norm(md) not in norm(it.get("title")):
-            continue
-        if not jcond and (JUNK.search(it.get("title", "")) or is_acc(it.get("title"), md)):
-            continue
-        p = num((it.get("price") or {}).get("value"))
-        if not p or (it.get("price") or {}).get("currency", "USD") != "USD":
-            continue
-        ship = 0.0
-        so = it.get("shippingOptions") or []
-        if so and so[0].get("shippingCost"):
-            ship = num(so[0]["shippingCost"].get("value")) or 0.0
-        tot.append({"p": round(p + ship, 2), "t": it.get("title", "")})
-    tot = clean(tot)
-    if not tot:
+    act = judge.comps(eb, md, int(num(row.get("eBayの状態ID")) or 3000), me, my_ids)
+    m = market(act)
+    if not m:
         return None, "同じ型番の競合なし"
-    tot.sort(key=lambda x: x["p"])
-    med = tot[len(tot) // 2]["p"]
-    low = cfg.get("競合の比較_第5章", {}).get("外れ値_中央値に対してこれ未満は無視", 0.35)
-    tot = [x for x in tot if x["p"] >= med * low] or tot
-    return tot[0]["p"], "競合%d件・最安$%.2f（%s）%s" % (len(tot), tot[0]["p"], md, tot[0]["t"][:60])
+    return m["最安"], "競合%d件・最安$%.2f・真ん中$%.2f（%s）" % (m["件数"], m["最安"], m["真ん中"], md)
 
 
 def sold_skus(eb, days):

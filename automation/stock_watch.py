@@ -4,7 +4,7 @@
 #  在庫ゼロの品が戻った → 最初は人に聞く（通知で一覧を出す。戻すのは data/答え/ の「在庫を戻す」の答えが来てから）。
 #  売れた品の仕入元が売り切れ → 事故としてすぐ知らせる。
 #  扱うのは Inventory API へ移し終えた品（台帳に offerId がある品）・仕入元の種類 A と C だけ（B は確認リスト）。
-import json, os, re, sys, time, urllib.error, urllib.request
+import json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import (ROOT, Ebay, EbayError, err_text, num, now, jst, settings, timetable, notify, notify_once_a_day, read_ledger, save_ledger,
                     is_target, write_run, mark_started, usual_ok, usual_add, load_json, save_json)
@@ -29,6 +29,30 @@ def fetch(url):
         return e.code, ""
     except Exception as e:  # 通信の失敗は「読めなかった」
         return None, str(e)[:120]
+
+
+def rakuten_stock(url):
+    """楽天のページは GitHub から読めない（アクセスを断られる）ので、楽天の公式API（商品コードで探す・売り切れも含む）で見る。
+    返事：(ある=True／ない=False／読めなかった=None, 理由)。中継（RAKUTEN_RELAY_URL）を通す（アプリが許可したIPだけ）"""
+    m = re.match(r"https?://item\.rakuten\.co\.jp/([^/?#]+)/([^/?#]+)", url or "")
+    rid, acc = os.environ.get("RAKUTEN_APP_ID", "").strip(), os.environ.get("RAKUTEN_ACCESS_KEY", "").strip()
+    relay, tok = os.environ.get("RAKUTEN_RELAY_URL", "").strip(), os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()
+    if not m or not (rid and acc and relay):
+        return "skip", ""
+    q = {"format": "json", "formatVersion": 2, "applicationId": rid, "itemCode": "%s:%s" % (m.group(1), m.group(2)), "availability": 0, "hits": 1}
+    req = urllib.request.Request(relay.rstrip("/") + "/search?" + urllib.parse.urlencode(q),
+                                 headers={"User-Agent": UA, "accessKey": acc, "X-Relay-Token": tok})
+    try:
+        j = json.loads(urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        return None, "楽天API HTTP %s" % e.code
+    except Exception as e:
+        return None, "楽天API %s" % str(e)[:80]
+    items = j.get("items") or j.get("Items") or []
+    if not items:
+        return None, "楽天APIで商品が見つからない（消えた可能性）"
+    it = items[0].get("Item", items[0])
+    return (True, "在庫あり（楽天API）") if int(it.get("availability") or 0) == 1 else (False, "売り切れ（楽天API）")
 
 
 def judge(code, html):
@@ -74,8 +98,13 @@ def main():
     for r in rows:
         if time.time() > t_end:
             break
-        code, html = fetch(r["仕入元URL"])
-        ok, why = judge(code, html)
+        ok, why = rakuten_stock(r["仕入元URL"])
+        code = None
+        if ok == "skip":
+            code, html = fetch(r["仕入元URL"])
+            ok, why = judge(code, html)
+        else:
+            time.sleep(1.5)   # 楽天APIの節度（1.5秒に1回）
         r["最後に仕入元を確認した日時"] = jst()
         if ok is None:
             unk[r["SKU"]] = unk.get(r["SKU"], 0) + 1
