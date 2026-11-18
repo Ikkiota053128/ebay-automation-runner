@@ -44,7 +44,13 @@ def main():
             continue
         cond = int(num(r.get("eBayの状態ID")) or 3000)
         try:
-            m = market(judge.comps(eb, md, cond, me, my_ids))
+            cat = ""
+            try:   # 自分の出品と同じカテゴリの競合だけ（付属品のカテゴリを混ぜない）
+                o = [x for x in eb.offers_of(r["SKU"]) if x.get("offerId") == r.get("offerId")]
+                cat = str((o[0] if o else {}).get("categoryId") or "")
+            except EbayError:
+                pass
+            m = market(judge.comps(eb, md, cond, me, my_ids, cat=cat or None))
         except EbayError as e:
             print("検索エラー", err_text(e)[:200])
             break
@@ -55,7 +61,7 @@ def main():
         x = round(p / m["基準"], 2)
         if x > 1.4:
             out.append({"SKU": r["SKU"], "eBayの出品ID": r.get("eBayの出品ID"), "offerId": r.get("offerId"), "タイトル": r.get("タイトル", "")[:80],
-                        "今の値段": p, "相場の基準": m["基準"], "倍率": x, "最安": m["最安"], "真ん中": m["真ん中"], "競合の数": m["件数"]})
+                        "今の値段": p, "相場の基準": m["基準"], "倍率": x, "カテゴリ": cat, "最安": m["最安"], "真ん中": m["真ん中"], "競合の数": m["件数"]})
         time.sleep(0.3)
     out.sort(key=lambda o: -o["倍率"])
     save_json(os.path.join(ROOT, "data", "上限", "終える候補.json"), {"時刻": jst(), "見た": len(rows), "競合なし・型番なし": nocomp, "候補": out})

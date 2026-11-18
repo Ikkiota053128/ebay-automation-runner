@@ -7,7 +7,7 @@
 - 利益の条件：利益額1,500円 かつ 利益率5%（設定 F123 がオフ＝両方）。
 - いまは「影の運転」：答えを data/判定/影/ に書くだけ。GAS の答えと並べて比べる。
 """
-import json, math, os, re, sys
+import collections, json, math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, load_json, num
 from price_adjust import JUNK, is_acc, clean, norm
@@ -96,11 +96,11 @@ def cond_of(title_ja):
     return None
 
 
-def comps(eb, model, cond, me, my_ids, cats=None):
+def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
     """同じ型番・同じ状態・即決・送料込み（米国の買い手に見える送料）。値段の調整と同じ外し方。返事：送料込みの値段（安い順）
     cats にリストを渡すと、残った競合の一番下のカテゴリ（leafCategoryIds）を入れる"""
     filt = "buyingOptions:{FIXED_PRICE},conditionIds:{%s}" % ("1000|1500" if cond < 3000 else "3000|4000|5000|6000")
-    items = eb.browse(model, filt)
+    items = eb.browse(model, filt, category=cat) if cat else eb.browse(model, filt)
     md = norm(model)
     out = []
     for it in items:
@@ -116,6 +116,14 @@ def comps(eb, model, cond, me, my_ids, cats=None):
         sh = num(so[0]["shippingCost"].get("value")) if so and so[0].get("shippingCost") else 0.0
         out.append({"p": round(p + (sh or 0), 2), "t": t, "c": str((it.get("leafCategoryIds") or [""])[0])})
     kept = clean(out)
+    if kept and not cat:
+        # 型番で探すと、付属品（フィルム・電池・ノブなど）が本体より多く出ることがある。本体は高いので、
+        # 値段の高いほうから1割（3件以上）の出品で一番多いカテゴリを「本体のカテゴリ」とし、そのカテゴリの出品だけを競合にする
+        top = sorted(kept, key=lambda x: -x["p"])[: max(3, len(kept) // 10)]
+        upper = [x["c"] for x in top if x["c"]]
+        if upper:
+            main = collections.Counter(upper).most_common(1)[0][0]
+            kept = [x for x in kept if x["c"] == main] or kept
     if cats is not None:
         cats.extend(x["c"] for x in kept if x["c"])
     return sorted(x["p"] for x in kept)

@@ -174,9 +174,12 @@ class Ebay:
     def withdraw(self, offer_id):
         return self.call("POST", "/sell/inventory/v1/offer/%s/withdraw" % offer_id, {})
 
-    def browse(self, q, filt, limit=100):
+    def browse(self, q, filt, limit=100, category=None):
         self.browse_n += 1
-        path = "/buy/browse/v1/item_summary/search?" + urllib.parse.urlencode({"q": q, "filter": filt, "limit": limit})
+        prm = {"q": q, "filter": filt, "limit": limit}
+        if category:
+            prm["category_ids"] = category
+        path = "/buy/browse/v1/item_summary/search?" + urllib.parse.urlencode(prm)
         _, j = self.call("GET", path, kind="app", headers={
             "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
             "X-EBAY-C-ENDUSERCTX": "contextualLocation=country=US,zip=10001"})
