@@ -85,6 +85,38 @@ def next_sku(c, n):
     return "G%s-%06d" % ("RK" if c["src"] == "楽天" else "YS", d["n"])
 
 
+def withdraw_asked(eb, live):
+    """オーナーに「出品をやめて」と言われた品（data/判定/取り下げ.json の SKU）を終える：withdraw → 読み直して UNPUBLISHED → 台帳を「終了」"""
+    p = os.path.join(ROOT, "data", "判定", "取り下げ.json")
+    d = load_json(p, {"待ち": [], "済み": []})
+    if not d.get("待ち") or not live:
+        return ""
+    led = {r["SKU"]: r for r in read_ledger()}
+    ok, bad, rows = [], [], []
+    for sku in list(d["待ち"]):
+        r = led.get(sku)
+        if not r or not r.get("offerId"):
+            bad.append((sku, "台帳に offerId が無い"))
+            continue
+        try:
+            o = [x for x in eb.offers_of(sku) if x.get("offerId") == r["offerId"]]
+            if o and o[0].get("status") == "PUBLISHED":
+                eb.withdraw(r["offerId"])
+            o = [x for x in eb.offers_of(sku) if x.get("offerId") == r["offerId"]]
+            if o and o[0].get("status") != "UNPUBLISHED":
+                raise RuntimeError("読み直しても UNPUBLISHED になっていない")
+            rows.append({"SKU": sku, "状態": "終了", "メモ": (r.get("メモ", "") + "・%s オーナーの指示で出品をやめた" % jst())[:500]})
+            ok.append(sku)
+            d["待ち"].remove(sku)
+            d["済み"].append({"SKU": sku, "時刻": jst()})
+        except (EbayError, RuntimeError) as e:
+            bad.append((sku, err_text(e)[:300]))
+    if rows:
+        save_ledger(rows, ["状態", "メモ"], NAME)
+    save_json(p, d)
+    return "出品をやめた：%s%s" % ("・".join(ok) or "なし", ("／できなかった：" + " / ".join("%s %s" % b for b in bad)) if bad else "")
+
+
 def main():
     cfg, tt = settings(), timetable(NAME)
     live = bool(tt.get("実行"))
@@ -94,6 +126,11 @@ def main():
         write_run(NAME, False, 0, 1)
         print("eBay の鍵が無い")
         return 0
+    wd_note = withdraw_asked(eb, live)
+    if wd_note:
+        print(wd_note)
+        notify("【判定と出品】" + wd_note)
+        wd_note = ""
     if browse_stopped():
         write_run(NAME, True, 0, 0)
         print("検索の回数上限で止めている")
@@ -181,8 +218,8 @@ def main():
                         r.update(値段=price, 利益=py, 利益率=round(pr, 4))
                         if py < qs["floorYen"] or pr < qs["floorRate"] - 1e-9:
                             r.update(結論="見送り", 理由="利益の条件を満たさない")
-                        elif not photos_of(c):
-                            r.update(結論="GASへ", 理由="写真が無い")
+                        elif len(photos_of(c)) < int(tt.get("写真の最低枚数", 3)):
+                            r.update(結論="GASへ", 理由="写真が%d枚未満（GASが商品ページから集める）" % int(tt.get("写真の最低枚数", 3)))
                         else:
                             r.update(結論="GO")
                             live_models.append(k)
@@ -239,6 +276,8 @@ def main():
             msg.append("カナリア：公開ページを目で見てから カナリア済み を true に")
     if errs:
         msg.append("エラー：" + " / ".join("%s %s" % (s, e[:120]) for s, e in errs[:5]))
+    if wd_note:
+        msg.append(wd_note)
     if gas_note.startswith("GASへの知らせに失敗"):
         msg.append(gas_note)
     if gas_items and not tt.get("GASにv664"):
