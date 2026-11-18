@@ -151,6 +151,10 @@ def main():
     done, bad, skip, results, rows = [], [], [], [], []
     for it in queue[:cap]:
         pl = it["payload"]
+        if kind_of((pl.get("ledger") or {}).get("src", ""), cfg) not in ("A", "C"):   # 在庫の監視が見られない仕入元（フリマなど）は出さない
+            skip.append((pl.get("sku"), "仕入元がA・C以外（GASで出品し直す）"))
+            results.append({"sku": pl.get("sku"), "error": "差し戻し：仕入元がフリマ・その他の店なので、GitHubの在庫の監視が見られない。GASで出品し直す"})
+            continue
         item, offer, why = build(pl, loc)
         if not item:
             skip.append((pl.get("sku"), why))
@@ -181,7 +185,7 @@ def main():
     if rows:   # 成功した品だけ台帳に1行
         save_ledger(rows, list(rows[0].keys()), NAME)
     gas_note = ""
-    if live and results:
+    if results and (live or all(r.get("error", "").startswith("差し戻し：") for r in results)):
         try:
             gas_note = gas_post({"kind": "ghlisted", "results": results})[:200]
         except Exception as e:   # 台帳とeBayは正しい。GASのシートへの書き戻しだけ失敗 → 知らせて次の回に任せない（人が見る）
