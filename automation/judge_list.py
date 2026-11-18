@@ -135,8 +135,10 @@ def main():
         dup = next((m for m in live_models if same_model(k, m)), None)
         if dup:
             r.update(結論="見送り", 理由="同じ型番がもう出品中（%s）" % dup)
-        elif judge.RULE_OUT.search(c["title"]) or judge.RULE_OUT.search(c["型番"]):
+        elif judge.RULE_OUT.search(judge.plain(c["title"])) or judge.RULE_OUT.search(c["型番"]):
             r.update(結論="見送り", 理由="キャラクター・ゲーム・限定品（決めごとA）")
+        elif judge.is_acc_ja(c["title"], c["型番"]):
+            r.update(結論="見送り", 理由="付属品・部品（本体ではない）")
         elif kind_of(c["url"], cfg) not in ("A", "C"):
             r.update(結論="GASへ", 理由="在庫の監視が見られない仕入元")
         else:
@@ -162,6 +164,8 @@ def main():
                 r.update(競合の数=len(act), 競合=act[:5], カテゴリ=cat)
                 if len(act) < 2:
                     r.update(結論="GASへ", 理由="同じ型番の競合が2件未満")
+                elif c["price"] < 0.2 * act[0] * 152:
+                    r.update(結論="見送り", 理由="仕入値がeBayの最安の2割未満（付属品・別物の疑い）")
                 elif not kind:
                     r.update(結論="GASへ", 理由="決めてある種類のカテゴリではない（%s）" % (cat or "多数決できない"))
                 else:

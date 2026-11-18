@@ -14,6 +14,28 @@ from price_adjust import JUNK, is_acc, clean, norm
 
 RULE_OUT = re.compile(r"pokemon|pokémon|nintendo|switch|playstation|\bps[2-5]\b|game|anime|figure|sanrio|disney|gundam|"
                       r"limited|collab|japan only|card|ポケモン|任天堂|限定|コラボ|フィギュア|ゲーム|プレステ|プレイステーション|ニンテンドー|スイッチ", re.I)
+# 付属品・部品（本体ではない）：「型番用」「バンド」「ベルト」など（店の商品名で多い）
+ACC_JA = re.compile(r"用(?![意途])|対応|互換|交換|替え|バンド|ベルト|ストラップ|ベゼル|風防|裏蓋|ケースのみ|ケース単品|箱のみ|空箱|保護フィルム|"
+                    r"フィルム(?!カメラ)|カバー|充電器|充電ケーブル|ケーブル|アダプター|アダプタ|バッテリー|電池パック|リモコン|説明書のみ|"
+                    r"部品|パーツ|ジャンク|修理|レンズキャップ|フード|ボディキャップ|コントローラー(?!付)")
+PROMO = re.compile(r"【[^】]*】|\[[^\]]*\]|＼[^／]*／")
+
+
+def plain(t):
+    """店の宣伝（【11/18限定！…】など）を外した商品名"""
+    return PROMO.sub(" ", str(t or ""))
+
+
+def is_acc_ja(t, model):
+    t = plain(t)
+    k = re.sub(r"[^A-Z0-9]", "", str(model).upper())
+    if re.search(re.escape(str(model)) + r"\s*(用|対応)", t, re.I) or (k and re.search(k + r"用", re.sub(r"[-\s]", "", t.upper()))):
+        return True
+    if len(set(re.findall(r"\b[A-Z]{1,5}-?\d{2,5}[A-Z0-9-]*", t.upper()))) >= 4:   # 型番がたくさん並ぶ＝「〜に対応」の付属品
+        return True
+    return bool(ACC_JA.search(t)) and not re.search(r"本体|ボディ(?!キャップ)|一式", t)
+
+
 NEW_JA = re.compile(r"新品|未開封")
 USED_JA = re.compile(r"中古|ユーズド|USED|used|美品|良品|ジャンク|難あり|訳あり|開封品|展示品|アウトレット|未使用に近い")
 
