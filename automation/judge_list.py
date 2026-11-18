@@ -329,6 +329,7 @@ def main():
         if (c["id"] in done and not c.get("_approved")) or k in best or len(k) < 4 or not re.search(r"\d", k):
             continue
         best[k] = c
+    judge.comp_cache_load(os.path.join(ROOT, "data", "判定", "相場の写し.json"), tt.get("相場の使い回し_時間", 6))   # 11/19 8:52 オーナー「おすすめは1から」
     todo = list(best.values())[: int(tt.get("1回に判定する上限_件", 40))]
     n_list = int(tt.get("1回の出品の上限_件", 20))
     if live and not tt.get("カナリア済み"):
@@ -480,6 +481,7 @@ def main():
             gas_note = "GASへの知らせに失敗：" + str(e)[:200]
     save_json(done_p, done)
     save_json(mgo_p, mgo)
+    ch, cm = judge.comp_cache_save()
     if live and ans_files:   # 取り込んだ GO の答え（出品できた・できなかったに関わらず）は取り込み済みへ
         import shutil as _sh
         os.makedirs(os.path.join(ROOT, "data", "答え", "取り込み済み"), exist_ok=True)
@@ -490,6 +492,7 @@ def main():
     cnt = collections.Counter(x["結論"] for x in res)
     msg = ["【判定と出品】%s %s：%d品を判定（GitHubだけ）" % (jst(), "本番" if live else "影の運転", len(res)),
            "・".join("%s %d" % kv for kv in cnt.most_common())]
+    msg.append("相場の使い回し：%d回・eBayの検索 %d回" % (ch, cm))
     why = collections.Counter(x.get("理由", "") for x in res if x["結論"] in ("見送り", "GASへ"))
     if why:
         msg.append("理由：" + "・".join("%s %d" % (k[:30], v) for k, v in why.most_common(5)))

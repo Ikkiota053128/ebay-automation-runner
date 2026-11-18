@@ -108,7 +108,48 @@ def cond_of(title_ja):
 CAT_NAMES = {}   # eBay のカテゴリ番号 → 名前（競合の出品から）
 
 
+_CC = {"path": None, "d": {}, "ttl": 0, "hit": 0, "miss": 0}
+
+
+def comp_cache_load(path, hours):
+    """相場（競合の値段）の使い回し：同じ型番・同じ状態・同じカテゴリの結果を hours 時間使う（教科書：6時間の使い回しで検索を減らす）"""
+    import json as _j, os as _o, time as _t
+    _CC.update(path=path, ttl=float(hours) * 3600, hit=0, miss=0)
+    try:
+        d = _j.load(open(path, encoding="utf-8")) if _o.path.exists(path) else {}
+    except Exception:
+        d = {}
+    _CC["d"] = {k: v for k, v in d.items() if v.get("t", 0) >= _t.time() - _CC["ttl"]}
+
+
+def comp_cache_save():
+    import json as _j, os as _o
+    if _CC["path"]:
+        _o.makedirs(_o.path.dirname(_CC["path"]), exist_ok=True)
+        _j.dump(_CC["d"], open(_CC["path"], "w", encoding="utf-8"), ensure_ascii=False)
+    return _CC["hit"], _CC["miss"]
+
+
 def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
+    import time as _t
+    k = "%s|%s|%s" % (norm(model), "used" if cond >= 3000 else "new", cat or "")
+    if _CC["ttl"] and k in _CC["d"]:
+        _CC["hit"] += 1
+        v = _CC["d"][k]
+        if cats is not None:
+            cats.extend(v.get("c", []))
+        return list(v["p"])
+    cc = []
+    ps = _comps(eb, model, cond, me, my_ids, cc, cat)
+    if cats is not None:
+        cats.extend(cc)
+    if _CC["ttl"]:
+        _CC["miss"] += 1
+        _CC["d"][k] = {"t": _t.time(), "p": ps, "c": cc}
+    return ps
+
+
+def _comps(eb, model, cond, me, my_ids, cats=None, cat=None):
     """同じ型番・同じ状態・即決・送料込み（米国の買い手に見える送料）。値段の調整と同じ外し方。返事：送料込みの値段（安い順）
     cats にリストを渡すと、残った競合の一番下のカテゴリ（leafCategoryIds）を入れる"""
     filt = "buyingOptions:{FIXED_PRICE},conditionIds:{%s}" % ("1000|1500" if cond < 3000 else "3000|4000|5000|6000")
