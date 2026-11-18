@@ -101,6 +101,42 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
     return pl
 
 
+AD_NAME = "eBayツール 自動広告（上限5.1%）"
+
+
+def promote_new(eb, rate):
+    """GitHub で出した出品（台帳のメモ「GitHubの判定と出品」・出品中）に広告（プロモーテッド・売れたときだけ払う）を付ける。
+    GAS と同じキャンペーン。広告率は 手数料率（17.42%）に入れてある広告の見込みの中。1件ずつ結果を見る"""
+    p = os.path.join(ROOT, "data", "判定", "広告済み.json")
+    done = load_json(p, {})
+    ids = [r["eBayの出品ID"] for r in read_ledger() if "GitHubの判定と出品" in (r.get("メモ") or "") and r.get("状態") == "出品中"
+           and r.get("eBayの出品ID") and r["eBayの出品ID"] not in done]
+    if not ids:
+        return ""
+    try:
+        _, j = eb.call("GET", "/sell/marketing/v1/ad_campaign?limit=200")
+        c = [x for x in j.get("campaigns", []) if x.get("campaignName") == AD_NAME and x.get("campaignStatus") != "ENDED"]
+        if not c:
+            return "広告：GASのキャンペーンが見つからない"
+        cid = c[0]["campaignId"]
+        ok, bad = 0, []
+        for i in range(0, len(ids), 50):
+            part = ids[i:i + 50]
+            _, r = eb.call("POST", "/sell/marketing/v1/ad_campaign/%s/bulk_create_ads_by_listing_id" % cid,
+                           {"requests": [{"listingId": x, "bidPercentage": "%.1f" % rate} for x in part]})
+            for res in r.get("responses", []):
+                lid = str(res.get("listingId", ""))
+                if int(res.get("statusCode") or 0) < 300 or "already" in json.dumps(res.get("errors", ""), ensure_ascii=False).lower():
+                    done[lid] = jst()
+                    ok += 1
+                else:
+                    bad.append("%s %s" % (lid, json.dumps(res.get("errors", ""), ensure_ascii=False)[:150]))
+        save_json(p, done)
+        return "広告を付けた %d品%s" % (ok, ("／できなかった：" + " / ".join(bad[:3])) if bad else "")
+    except EbayError as e:
+        return "広告でエラー：" + err_text(e)[:200]
+
+
 def next_sku(c, n):
     p = os.path.join(ROOT, "data", "判定", "SKUの番号.json")
     d = load_json(p, {"n": 0})
@@ -159,6 +195,10 @@ def main():
     ls = listing_limit_stopped()
     if ls and live:
         print("eBay の出品の上限に当たったので、%s まで出品しない（判定もしない）" % ls["再開してよい時刻"][:16])
+        ad = promote_new(eb, float(tt.get("広告率", 2.0)))
+        if ad:
+            print(ad)
+            notify("【判定と出品】" + ad)
         write_run(NAME, True, 0, 0)
         return 0
     if browse_stopped():
@@ -328,6 +368,10 @@ def main():
         msg.append("エラー：" + " / ".join("%s %s" % (s, e[:120]) for s, e in errs[:5]))
     if wd_note:
         msg.append(wd_note)
+    if live and tt.get("広告率", 2.0):
+        ad = promote_new(eb, float(tt.get("広告率", 2.0)))
+        if ad:
+            msg.append(ad)
     if gas_note.startswith("GASへの知らせに失敗"):
         msg.append(gas_note)
     if gas_items and not tt.get("GASにv664"):
