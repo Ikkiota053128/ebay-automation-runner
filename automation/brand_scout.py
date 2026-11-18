@@ -25,7 +25,7 @@ STOP = re.compile(r"^(the|new|used|japan|jp|vintage|rare|mint|near|exc|excellent
 def brands_in(title):
     t = re.sub(r"[【\[（(].*?[】\]）)]", " ", str(title))
     w = re.findall(r"[A-Za-z][A-Za-z0-9&'.-]{2,}", t)
-    return [x.strip(".-'") for x in w[:2] if not STOP.match(x) and not re.search(r"\d", x)]
+    return [x.strip(".-'") for x in w[:1] if not STOP.match(x) and not re.search(r"\d", x)]
 
 
 def ebay_total(eb, q):
