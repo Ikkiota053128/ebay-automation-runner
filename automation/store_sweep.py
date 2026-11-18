@@ -21,6 +21,8 @@ STORES = [
     # 11/18 22:28 オーナー「はい」（新しい仕入れ先の開拓）：大貫カメラ・荻窪カメラのさくらや・オーディオユニオン
     {"name": "大貫カメラ", "host": "www.camera-ohnuki.com", "search": "https://www.camera-ohnuki.com/search?q={q}&type=product&options%5Bunavailable_products%5D=hide", "link": r"/products/[A-Za-z0-9\-%]+", "makers": CAM},
     {"name": "荻窪カメラのさくらや", "host": "www.ogisaku.com", "search": "https://www.ogisaku.com/products/list.php?mode=search&name={q}", "link": r"(?:https://www\.ogisaku\.com)?/products/detail\.php\?product_id=\d+", "makers": CAM},
+    {"name": "イケベ楽器", "host": "www.ikebe-gakki.com", "search": "https://www.ikebe-gakki.com/Form/Product/ProductList.aspx?shop=0&cat=&bid=ec&dpcnt=40&img=1&sort=07&udns=1&fpfl=0&sfl=0&_class=%E3%83%A6%E3%83%BC%E3%82%BA%E3%83%89&swrd={q}&pno=1",
+     "link": r"/Form/Product/ProductDetail\.aspx\?shop=0&(?:amp;)?pid=\d+", "makers": MUS},
     {"name": "オーディオユニオン", "host": "www.audiounion.jp", "search": "https://www.audiounion.jp/shop/goods/search.aspx?search=x&keyword={q}", "link": r"/shop/g/g[0-9A-Za-z]+/?", "makers": r"sony|technics|pioneer|marantz|denon|yamaha|accuphase|luxman|onkyo|kenwood|sansui|audio-technica|nakamichi|teac|tascam|akai|victor|aiwa|stax|fostex|ortofon|shure|sennheiser|beyerdynamic|akg"},
     # カメラの八百富は外す（11/18 オーナー承認）：規約 第16条で、写真・文章の無断の複製・転載を禁止しているため
     # フジヤカメラは GitHub からの読み込みを受け付けない（202・中身なし）ので外す（11/18 下調べ）
@@ -187,12 +189,14 @@ def main():
                 if m["rx"].search(near.upper().replace("‐", "-")) and u not in links:
                     links.append(u)
             for u in links[:4]:
+                u = u.replace("&amp;", "&")
                 full = u if u.startswith("http") else "https://" + s["host"] + u
-                key = s["name"] + ":" + full.split("?")[0]
+                full = full if re.search(r"[?&](?:pid|product_id)=", full) else full.split("?")[0]
+                key = s["name"] + ":" + full
                 if key in seen:
                     continue
                 seen[key] = now().timestamp()
-                c2, h2 = fetch(full.split("?")[0])
+                c2, h2 = fetch(full)
                 st["商品ページ"] += 1
                 time.sleep(gap)
                 p = ld_product(h2) if c2 == 200 else None
@@ -202,7 +206,7 @@ def main():
                 if p["avail"] and not re.search(r"InStock|LimitedAvailability", p["avail"], re.I):
                     why["売り切れ"] = why.get("売り切れ", 0) + 1
                     continue
-                it = {"id": key, "title": p["title"], "price": p["price"], "url": full.split("?")[0], "photos": p["photos"]}
+                it = {"id": key, "title": p["title"], "price": p["price"], "url": full, "photos": p["photos"]}
                 r = keep(it, m)
                 if r:
                     why[r] = why.get(r, 0) + 1
