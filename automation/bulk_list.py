@@ -78,7 +78,8 @@ def build(pl, loc):
         aspects.setdefault(k, [])
         if v not in aspects[k]:
             aspects[k].append(v)
-    item = {"product": {"title": pl["title"], "description": pl["description"], "aspects": aspects, "imageUrls": imgs[:24]},
+    # 商品（inventory_item）の説明は4,000文字までなので入れない。出品の説明文はオファーの listingDescription に全部入れる
+    item = {"product": {"title": pl["title"], "aspects": aspects, "imageUrls": imgs[:24]},
             "condition": cond, "availability": {"shipToLocationAvailability": {"quantity": int(pl.get("quantity") or 1)}}}
     if pl.get("ean"):
         item["product"]["ean"] = [pl["ean"]]

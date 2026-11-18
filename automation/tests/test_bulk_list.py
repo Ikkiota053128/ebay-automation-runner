@@ -33,7 +33,7 @@ def opener(req, timeout=0):
     if "/offer?sku=" in u:
         sku = urllib.parse.unquote(u.split("sku=")[1].split("&")[0]); return R({"offers": offers.get(sku, [])})
     if m == "PUT" and "/inventory_item/" in u:
-        b = json.loads(req.data); assert b["condition"] == "USED_EXCELLENT" and b["packageWeightAndSize"]["weight"]["unit"] == "KILOGRAM"
+        b = json.loads(req.data); assert "description" not in b["product"] and b["condition"] == "USED_EXCELLENT" and b["packageWeightAndSize"]["weight"]["unit"] == "KILOGRAM"
         assert req.headers.get("Content-language") == "en-US"; return R({})
     if m == "PUT" and "/offer/" in u: return R({})
     if m == "POST" and u.endswith("/offer"):
