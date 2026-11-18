@@ -36,7 +36,11 @@ def rakuten(m, key):
          "sort": "-updateTimestamp", "availability": 1, "hits": 30, "page": 1}
     if m["cap"] > 0:
         q["maxPrice"] = m["cap"]
-    code, j = get_json(RK + "?" + urllib.parse.urlencode(q), {"accessKey": key["access"]})
+    if key.get("relay"):   # 楽天のアプリは「許可されたIP」を中継（固定IP）だけにしているので、GASと同じ中継を通す
+        code, j = get_json(key["relay"].rstrip("/") + "/search?" + urllib.parse.urlencode(q),
+                           {"accessKey": key["access"], "X-Relay-Token": key.get("relay_token", "")})
+    else:
+        code, j = get_json(RK + "?" + urllib.parse.urlencode(q), {"accessKey": key["access"]})
     items = []
     for it in j.get("items", []) or j.get("Items", []):
         it = it.get("Item", it)
@@ -79,7 +83,8 @@ def main():
     tt = timetable(NAME)
     live = bool(tt.get("実行"))
     mark_started(NAME)
-    rk = {"id": os.environ.get("RAKUTEN_APP_ID", "").strip(), "access": os.environ.get("RAKUTEN_ACCESS_KEY", "").strip()}
+    rk = {"id": os.environ.get("RAKUTEN_APP_ID", "").strip(), "access": os.environ.get("RAKUTEN_ACCESS_KEY", "").strip(),
+          "relay": os.environ.get("RAKUTEN_RELAY_URL", "").strip(), "relay_token": os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()}
     ya = os.environ.get("YAHOO_CLIENT_ID", "").strip()
     d = gas_get_models()
     if not d:
@@ -98,7 +103,7 @@ def main():
     stat = {"楽天": {"見た": 0, "残った": 0, "API": 0}, "Yahoo!": {"見た": 0, "残った": 0, "API": 0}}
     why, cands, stop, done = {}, [], set(), 0
     last = {"楽天": 0.0, "Yahoo!": 0.0}
-    gap = {"楽天": float(tt.get("楽天の間隔_秒", 1.5)), "Yahoo!": float(tt.get("Yahooの間隔_秒", 1.0))}
+    gap = {"楽天": float(tt.get("楽天の間隔_秒", 1.5)), "Yahoo!": float(tt.get("Yahooの間隔_秒", 3.0))}
     for m in todo:
         if time.time() > t_end:
             break
@@ -111,6 +116,11 @@ def main():
             code, items = fn(m)
             last[src] = time.time()
             stat[src]["API"] += 1
+            if code == 429:   # GAS も同じ鍵で使っている → 少し待って1回だけやり直す
+                time.sleep(15)
+                code, items = fn(m)
+                last[src] = time.time()
+                stat[src]["API"] += 1
             if code in (429, 403, 503) or code is None:
                 stop.add(src)
                 why["%s を止めた（HTTP %s）" % (src, code)] = 1

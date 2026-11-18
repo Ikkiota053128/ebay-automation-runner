@@ -30,6 +30,8 @@ jobs:
           LEDGER_ROOT: ${{ github.workspace }}/data_repo
           RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
           RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+          RAKUTEN_RELAY_URL: ${{ secrets.RAKUTEN_RELAY_URL }}
+          RAKUTEN_RELAY_TOKEN: ${{ secrets.RAKUTEN_RELAY_TOKEN }}
           YAHOO_CLIENT_ID: ${{ secrets.YAHOO_CLIENT_ID }}
           GAS_WEBAPP_URL: ${{ secrets.GAS_WEBAPP_URL }}
           GAS_SEND_TOKEN: ${{ secrets.GAS_SEND_TOKEN }}
