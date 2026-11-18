@@ -46,7 +46,8 @@ def rakuten(m, key):
         it = it.get("Item", it)
         imgs = [u.get("imageUrl", u) if isinstance(u, dict) else u for u in (it.get("mediumImageUrls") or [])]
         items.append({"id": "rk:" + str(it.get("itemCode", "")), "title": str(it.get("itemName", "")), "price": int(it.get("itemPrice") or 0),
-                      "url": str(it.get("itemUrl", "")).split("?")[0], "photos": [str(u).split("?")[0] for u in imgs if u]})
+                      "url": str(it.get("itemUrl", "")).split("?")[0], "photos": [str(u).split("?")[0] for u in imgs if u],
+                      "dom": 0 if int(it.get("postageFlag") or 0) == 0 else 2000})   # 楽天 postageFlag 0＝送料込み。送料別は安全値2,000円
     return code, items
 
 
@@ -59,7 +60,8 @@ def yahoo(m, appid):
     for h in j.get("hits", []):
         img = (h.get("exImage") or {}).get("url") or (h.get("image") or {}).get("medium") or ""
         items.append({"id": "ys:" + str(h.get("code", "")), "title": str(h.get("name", "")), "price": int(h.get("price") or 0),
-                      "url": str(h.get("url", "")), "photos": [img] if img else []})
+                      "url": str(h.get("url", "")), "photos": [img] if img else [],
+                      "dom": 0 if int(((h.get("shipping") or {}).get("code")) or 0) == 2 else 2000})   # Yahoo! shipping.code 2＝送料無料
     return code, items
 
 
@@ -77,6 +79,38 @@ def keep(it, m):
     if not hit:
         return "型番が商品名に無い"
     return ""
+
+
+def shadow_judge(cands, n):
+    """影の運転：GitHub の判定（judge.py）を、出品したことのある型番の候補 n 品にかけて記録だけする（GAS の答えと比べるため）"""
+    if n <= 0 or not cands:
+        return ""
+    try:
+        from common import Ebay, settings, read_ledger, browse_stopped
+        import judge
+        profs, st = judge.materials()
+        todo = [c for c in cands if judge.profile_for(c["型番"], profs)][:n]
+        if not todo or browse_stopped():
+            return "判定の影：対象 0品" if not todo else "判定の影：検索の回数上限で止めている"
+        eb, cfg = Ebay(), settings()
+        if not eb.ready():
+            return ""
+        me = cfg.get("店", {}).get("セラー名", "").lower()
+        my_ids = {r.get("eBayの出品ID") for r in read_ledger()}
+        qs = {"floorYen": 1500, "floorRate": 0.05, "tol": 0.30, "high": 100, "overMax": 1.4}
+        qs.update(cfg.get("判定", {}).get("値付け", {}))
+        fx = float(cfg.get("判定", {}).get("為替", 152))
+        out = []
+        for c in todo:
+            try:
+                out.append(judge.judge(eb, c, profs, st, qs, me, my_ids, fx))
+            except Exception as e:   # 1品の失敗で全体を止めない
+                out.append({"url": c["url"], "型番": c["型番"], "結論": "エラー", "理由": str(e)[:300]})
+        save_json(os.path.join(ROOT, "data", "判定", "影", now().strftime("%Y%m%d_%H%M") + ".json"), out)
+        go = sum(1 for x in out if x["結論"] == "GO")
+        return "判定の影：%d品を判定 → GO %d・見送り %d（記録だけ。GASの答えと比べる）" % (len(out), go, len(out) - go)
+    except Exception as e:
+        return "判定の影でエラー：" + str(e)[:200]
 
 
 def main():
@@ -166,6 +200,7 @@ def main():
                     raise SystemExit("GASが受け取りを断った")
                 sent += len(part[i:i + 15])
                 time.sleep(3)
+    shadow = shadow_judge(cands if live else queue, int(tt.get("判定の影_件", 10)))
     sent_ids = {c["id"] for c in cands} if live else set()
     save_json(back_p, [c for c in queue if c["id"] not in sent_ids])
     rec = {"時刻": jst(), "本番": live, "送る待ち": len(queue) - len(sent_ids), "見た型番": done, "型番の数": len(models), "数": stat, "外した理由": why,
@@ -177,6 +212,8 @@ def main():
     if why:
         msg.append("外した理由：" + "・".join("%s %d" % kv for kv in sorted(why.items(), key=lambda x: -x[1])[:6]))
     msg.append(("GASへ送った %d品（仕入値が上限より安い順）・送る待ち %d品" % (sent, len(queue) - len(sent_ids))) if live else ("候補 %d品（ドライランなのでGASには送っていない）" % len(cands)))
+    if shadow:
+        msg.append(shadow)
     write_run(NAME, True, len(cands), len(stop))
     print("\n".join(msg))
     if live or now().hour in (9, 13, 18, 22) or os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":   # ドライランの知らせは1日4回だけ
