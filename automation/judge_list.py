@@ -49,6 +49,29 @@ def photos_of(c):
     return out[:12]
 
 
+def more_photos(c):
+    """Yahoo!ショッピングは、APIの写真が1枚だけ。商品ページ（GitHub から読める）から同じ商品の写真（_1, _2 …）を集める。楽天のページは読めない"""
+    ph = photos_of(c)
+    if "store.shopping.yahoo.co.jp" not in c.get("url", "") or len(ph) >= 3:
+        return ph
+    try:
+        from stock_watch import fetch
+        code, html = fetch(c["url"])
+        if code != 200:
+            return ph
+        m = re.search(r"/i/[a-z]/([A-Za-z0-9\-]+_[A-Za-z0-9\-]+)", ph[0]) if ph else None
+        base = m.group(1) if m else ""
+        for u in re.findall(r"https://item-shopping\.c\.yimg\.jp/i/[a-z]/([A-Za-z0-9_\-]+)", html):
+            if base and not u.startswith(base):
+                continue
+            uu = "https://item-shopping.c.yimg.jp/i/n/" + u
+            if uu not in ph:
+                ph.append(uu)
+        return ph[:12]
+    except Exception:
+        return ph
+
+
 def make_payload(c, kind, cat, cond, price, fp, ship, sku):
     brand, model = brand_of(c["メーカー"]), c["型番"]
     cw = "New" if cond < 3000 else "Used"
@@ -62,7 +85,7 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
     w, (l, wd, h) = kind["重さ_g"], sorted([float(x) for x in kind["箱"].split("x")], reverse=True)
     pol = kind.get("ポリシー") or {}
     pl = {"sku": sku, "title": title, "description": html, "categoryId": cat, "conditionId": cond, "aspects": asp,
-          "imageUrls": photos_of(c), "quantity": 1, "price": price, "ean": "",
+          "imageUrls": c.get("_photos") or photos_of(c), "quantity": 1, "price": price, "ean": "",
           "policies": {"fulfillment": pol.get("発送", "327189638011"), "payment": pol.get("支払い", "318927569011"),
                        "returns": pol.get("返品", "318925133011")},
           "bestOffer": {"bestOfferEnabled": True, "autoDeclinePrice": {"value": "%.2f" % fp, "currency": "USD"},
@@ -224,7 +247,7 @@ def main():
                         r.update(値段=price, 利益=py, 利益率=round(pr, 4))
                         if py < qs["floorYen"] or pr < qs["floorRate"] - 1e-9:
                             r.update(結論="見送り", 理由="利益の条件を満たさない")
-                        elif len(photos_of(c)) < int(tt.get("写真の最低枚数", 3)):
+                        elif len(c.setdefault("_photos", more_photos(c))) < int(tt.get("写真の最低枚数", 3)):
                             r.update(結論="GASへ", 理由="写真が%d枚未満（GASが商品ページから集める）" % int(tt.get("写真の最低枚数", 3)))
                         else:
                             r.update(結論="GO")
