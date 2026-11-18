@@ -13,7 +13,7 @@ from common import ROOT, load_json, num
 from price_adjust import JUNK, is_acc, clean, norm
 
 RULE_OUT = re.compile(r"pokemon|pokémon|nintendo|switch|playstation|\bps[2-5]\b|game|anime|figure|sanrio|disney|gundam|"
-                      r"limited|collab|japan only|card|ポケモン|任天堂|限定|コラボ|フィギュア|ゲーム", re.I)
+                      r"limited|collab|japan only|card|ポケモン|任天堂|限定|コラボ|フィギュア|ゲーム|プレステ|プレイステーション|ニンテンドー|スイッチ", re.I)
 NEW_JA = re.compile(r"新品|未開封")
 USED_JA = re.compile(r"中古|ユーズド|USED|used|美品|良品|ジャンク|難あり|訳あり|開封品|展示品|アウトレット|未使用に近い")
 
@@ -72,8 +72,9 @@ def cond_of(title_ja):
     return None
 
 
-def comps(eb, model, cond, me, my_ids):
-    """同じ型番・同じ状態・即決・送料込み（米国の買い手に見える送料）。値段の調整と同じ外し方。返事：送料込みの値段（安い順）"""
+def comps(eb, model, cond, me, my_ids, cats=None):
+    """同じ型番・同じ状態・即決・送料込み（米国の買い手に見える送料）。値段の調整と同じ外し方。返事：送料込みの値段（安い順）
+    cats にリストを渡すと、残った競合の一番下のカテゴリ（leafCategoryIds）を入れる"""
     filt = "buyingOptions:{FIXED_PRICE},conditionIds:{%s}" % ("1000|1500" if cond < 3000 else "3000|4000|5000|6000")
     items = eb.browse(model, filt)
     md = norm(model)
@@ -89,8 +90,11 @@ def comps(eb, model, cond, me, my_ids):
             continue
         so = it.get("shippingOptions") or []
         sh = num(so[0]["shippingCost"].get("value")) if so and so[0].get("shippingCost") else 0.0
-        out.append({"p": round(p + (sh or 0), 2), "t": t})
-    return sorted(x["p"] for x in clean(out))
+        out.append({"p": round(p + (sh or 0), 2), "t": t, "c": str((it.get("leafCategoryIds") or [""])[0])})
+    kept = clean(out)
+    if cats is not None:
+        cats.extend(x["c"] for x in kept if x["c"])
+    return sorted(x["p"] for x in kept)
 
 
 def floor_price(base, keep, fx, fl_yen, fl_rate):

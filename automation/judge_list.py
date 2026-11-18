@@ -1,0 +1,249 @@
+"""判定と出品（GitHubだけで）：店の地引網の「送る待ち」から、GitHub が判定（利益・送料・eBayの相場・GO）と出品データ作りをして、そのまま出品する。
+
+- 1回に見る数は 時刻表 の「1回に判定する上限_件」。同じ型番は1回に1品（一番安い仕入値）。もう出品中の型番は出さない（台帳・この回）。
+- カテゴリは eBay の同じ型番の競合のカテゴリ（多数決・半分以上）。決めてある種類（カメラ・時計・レンズ・エフェクター…）だけ扱う。
+  それ以外・競合が2件未満・状態が読めない品は「GASへ」（店の地引網が今までどおり GAS に送る）。
+- 重さ・箱・タイトルの言葉・項目は、種類ごとに GAS で出した実績の値（data/判定/種類.json）。送料は FedEx の表。
+- 値段・利益の条件は judge.py（GAS の quotePrice_ と同じ）。
+- 時刻表の「実行」が false の間は影の運転（判定と出品データを記録するだけ）。本番の最初はカナリア。
+- 出した品は台帳に1行・GAS へ kind=ghnew（「GASにv664」が true のときだけ）。GAS の出品一覧に載り、GAS が同じ型番を出さない。
+- 検索（Browse）の残りが「Browseの残りの下限」より少ないときは止める（GAS の分を残す）。
+"""
+import collections, json, os, re, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import (ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
+                    mark_started, load_json, save_json, browse_stopped, browse_stop)
+from price_adjust import model_of
+import judge
+from bulk_list import build, list_one, location_key, mkey, same_model
+from stock_watch import kind_of
+
+NAME = "判定と出品"
+HERE = os.path.dirname(os.path.abspath(__file__))
+BRAND_JA = {"カシオ": "Casio", "ソニー": "Sony", "シチズン": "Citizen", "セイコー": "Seiko", "キヤノン": "Canon", "キャノン": "Canon",
+            "ニコン": "Nikon", "オリンパス": "Olympus", "ペンタックス": "Pentax", "パナソニック": "Panasonic", "富士フイルム": "Fujifilm",
+            "フジフイルム": "Fujifilm", "リコー": "Ricoh", "ボス": "BOSS", "ローランド": "Roland", "ヤマハ": "Yamaha", "シマノ": "Shimano",
+            "ダイワ": "Daiwa", "タムロン": "Tamron", "シグマ": "Sigma", "オーディオテクニカ": "Audio-Technica", "デノン": "Denon"}
+KEEP_CAPS = {"BOSS", "MXR", "TEAC", "AKAI", "JVC", "TDK", "SMC", "EHX"}
+COND_DESC = "Used. NOT TESTED - we have not tested this item and its function is not confirmed. Please judge from the photos."
+
+
+def brand_of(maker):
+    m = str(maker or "").strip()
+    if m in BRAND_JA:
+        return BRAND_JA[m]
+    if m.upper() in KEEP_CAPS:
+        return m.upper()
+    return m[:1].upper() + m[1:].lower() if m.isupper() or m.islower() else m
+
+
+def photos_of(c):
+    out = []
+    for u in c.get("photos") or []:
+        u = str(u)
+        if "item-shopping.c.yimg.jp/i/" in u:   # Yahoo! の小さい画像 → 600px
+            u = re.sub(r"/i/[a-z]/", "/i/n/", u)
+        if u.startswith("https://") and u not in out:
+            out.append(u)
+    return out[:12]
+
+
+def make_payload(c, kind, cat, cond, price, fp, ship, sku):
+    brand, model = brand_of(c["メーカー"]), c["型番"]
+    cw = "New" if cond < 3000 else "Used"
+    title = re.sub(r"\s+", " ", "%s %s %s %s From Japan" % (brand, model, kind["言葉"], cw)).strip()[:80]
+    html = open(os.path.join(HERE, "desc_template.html"), encoding="utf-8").read()
+    html = (html.replace("{{TITLE}}", title).replace("{{BRAND}}", brand).replace("{{MODEL}}", model)
+            .replace("{{COND}}", "New" if cond < 3000 else "Used")
+            .replace("{{FUNC}}", "New item." if cond < 3000 else "Not tested. Please check the photos."))
+    asp = [["Brand", brand], ["Model", model]] + [[k, "Does not apply"] for k in kind["項目"]] + \
+          [["Shipping Method", "FedEx International Connect Plus (tracked)"]]
+    w, (l, wd, h) = kind["重さ_g"], sorted([float(x) for x in kind["箱"].split("x")], reverse=True)
+    pol = kind.get("ポリシー") or {}
+    pl = {"sku": sku, "title": title, "description": html, "categoryId": cat, "conditionId": cond, "aspects": asp,
+          "imageUrls": photos_of(c), "quantity": 1, "price": price, "ean": "",
+          "policies": {"fulfillment": pol.get("発送", "327189638011"), "payment": pol.get("支払い", "318927569011"),
+                       "returns": pol.get("返品", "318925133011")},
+          "bestOffer": {"bestOfferEnabled": True, "autoDeclinePrice": {"value": "%.2f" % fp, "currency": "USD"},
+                        "autoAcceptPrice": {"value": "%.2f" % (fp + 0.01), "currency": "USD"}},
+          "pkg": {"weightG": w, "lengthCm": l, "widthCm": wd, "heightCm": h},
+          "ledger": {"src": c["url"], "cost": c["price"], "ship": ship, "feeRate": kind.get("手数料率", 0.1742),
+                     "dutyRate": kind.get("関税率", 0.15), "fixed": 0, "dom": c.get("dom", 2000), "fx": 152,
+                     "note": "GitHubの判定（%s）" % kind["名前"]}}
+    if cond >= 3000:
+        pl["conditionDescription"] = COND_DESC
+    if fp >= price:   # フロアの値段で出すときは、値下げの交渉を受けない
+        pl["bestOffer"] = {"bestOfferEnabled": False}
+    return pl
+
+
+def next_sku(c, n):
+    p = os.path.join(ROOT, "data", "判定", "SKUの番号.json")
+    d = load_json(p, {"n": 0})
+    d["n"] = int(d["n"]) + 1
+    save_json(p, d)
+    return "G%s-%06d" % ("RK" if c["src"] == "楽天" else "YS", d["n"])
+
+
+def main():
+    cfg, tt = settings(), timetable(NAME)
+    live = bool(tt.get("実行"))
+    mark_started(NAME)
+    eb = Ebay()
+    if not eb.ready():
+        write_run(NAME, False, 0, 1)
+        print("eBay の鍵が無い")
+        return 0
+    if browse_stopped():
+        write_run(NAME, True, 0, 0)
+        print("検索の回数上限で止めている")
+        return 0
+    rem = eb.browse_remaining() or {}
+    floor_left = int(tt.get("Browseの残りの下限", 1500))
+    if rem.get("remaining") is not None and int(rem["remaining"]) < floor_left:
+        print("Browse の残り %s 回（下限 %d）なので、今回は判定しない" % (rem["remaining"], floor_left))
+        write_run(NAME, True, 0, 0)
+        return 0
+    kinds = load_json(os.path.join(ROOT, "data", "判定", "種類.json"), {})
+    st = load_json(os.path.join(ROOT, "data", "判定", "送料表.json"), {})
+    qs = {"floorYen": 1500, "floorRate": 0.05, "tol": 0.30, "high": 100, "overMax": 1.4}
+    qs.update(cfg.get("判定", {}).get("値付け", {}))
+    me = cfg.get("店", {}).get("セラー名", "").lower()
+    led = read_ledger()
+    my_ids = {r.get("eBayの出品ID") for r in led}
+    ledger_skus = {r["SKU"] for r in led}
+    live_models = [m for m in (mkey(model_of(r.get("タイトル"))) for r in led if r.get("状態") == "出品中" and r.get("タイトル")) if m]
+    done_p = os.path.join(ROOT, "data", "判定", "判定済み.json")
+    done = {k: v for k, v in load_json(done_p, {}).items() if v.get("t", 0) >= now().timestamp() - 14 * 86400}
+    back = load_json(os.path.join(ROOT, "data", "店の地引網", "送る待ち.json"), [])
+    # 同じ型番は一番安い1品。判定済み・出品中の型番は飛ばす
+    best = {}
+    for c in sorted(back, key=lambda c: c["price"]):
+        k = mkey(c["型番"])
+        if c["id"] in done or k in best or len(k) < 4 or not re.search(r"\d", k):
+            continue
+        best[k] = c
+    todo = list(best.values())[: int(tt.get("1回に判定する上限_件", 40))]
+    n_list = int(tt.get("1回の出品の上限_件", 20))
+    if live and not tt.get("カナリア済み"):
+        n_list = min(n_list, int(tt.get("カナリアの件数", 5)))
+    loc = location_key(eb, cfg) if live else ""
+    res, listed, rows, gas_items, errs = [], [], [], [], []
+    for c in todo:
+        k = mkey(c["型番"])
+        r = {"id": c["id"], "url": c["url"], "型番": c["型番"], "仕入値": c["price"], "仕入元の商品名": c["title"][:80]}
+        dup = next((m for m in live_models if same_model(k, m)), None)
+        if dup:
+            r.update(結論="見送り", 理由="同じ型番がもう出品中（%s）" % dup)
+        elif judge.RULE_OUT.search(c["title"]) or judge.RULE_OUT.search(c["型番"]):
+            r.update(結論="見送り", 理由="キャラクター・ゲーム・限定品（決めごとA）")
+        elif kind_of(c["url"], cfg) not in ("A", "C"):
+            r.update(結論="GASへ", 理由="在庫の監視が見られない仕入元")
+        else:
+            cond = judge.cond_of(c["title"])
+            if cond is None:
+                r.update(結論="GASへ", 理由="新品か中古か商品名から読めない")
+            else:
+                cats = []
+                try:
+                    act = judge.comps(eb, c["型番"], cond, me, my_ids, cats)
+                except EbayError as e:
+                    if e.status == 429:
+                        browse_stop(rem.get("reset") or "")
+                        r.update(結論="エラー", 理由="検索の回数上限（429）")
+                        res.append(r)
+                        break
+                    r.update(結論="エラー", 理由=err_text(e)[:300])
+                    res.append(r)
+                    continue
+                cc = collections.Counter(cats).most_common(1)
+                cat = cc[0][0] if cc and cc[0][1] * 2 >= len(cats) else ""
+                kind = kinds.get(cat)
+                r.update(競合の数=len(act), 競合=act[:5], カテゴリ=cat)
+                if len(act) < 2:
+                    r.update(結論="GASへ", 理由="同じ型番の競合が2件未満")
+                elif not kind:
+                    r.update(結論="GASへ", 理由="決めてある種類のカテゴリではない（%s）" % (cat or "多数決できない"))
+                else:
+                    ship = judge.ship_fedex(kind["重さ_g"], kind["箱"], st["FedEx"])
+                    d = {"cost": c["price"], "dom": c.get("dom", 2000), "ship": ship, "fee": kind.get("手数料率", 0.1742),
+                         "duty": kind.get("関税率", 0.15), "fixed": 0, "fx": 152}
+                    price, how, fp = judge.quote(act, d, qs)
+                    r.update(種類=kind["名前"], 送料=ship, 国内送料=d["dom"], フロア=fp, 値段の決め方=how)
+                    if price is None:
+                        r.update(結論="見送り", 理由=how)
+                    else:
+                        py, pr = judge.profit(price, d)
+                        r.update(値段=price, 利益=py, 利益率=round(pr, 4))
+                        if py < qs["floorYen"] or pr < qs["floorRate"] - 1e-9:
+                            r.update(結論="見送り", 理由="利益の条件を満たさない")
+                        elif not photos_of(c):
+                            r.update(結論="GASへ", 理由="写真が無い")
+                        else:
+                            r.update(結論="GO")
+                            live_models.append(k)
+                            if live and len(listed) < n_list:
+                                sku = next_sku(c, 0)
+                                pl = make_payload(c, kind, cat, cond, price, fp, ship, sku)
+                                item, offer, why = build(pl, loc)
+                                if not item:
+                                    r.update(結論="エラー", 理由="出品データが足りない：" + why)
+                                else:
+                                    try:
+                                        lid, oid = list_one(eb, pl, item, offer)
+                                        r.update(出品="eBay %s" % lid, SKU=sku)
+                                        listed.append((sku, lid, pl["title"], price))
+                                        gas_items.append({"itemId": lid, "offerId": oid, "sku": sku, "title": pl["title"], "price": price,
+                                                          "cost": c["price"], "src": c["url"]})
+                                        if sku not in ledger_skus:
+                                            rows.append({"SKU": sku, "eBayの出品ID": lid, "offerId": oid, "仕入元URL": c["url"],
+                                                         "仕入元の種類": kind_of(c["url"], cfg), "仕入値(円)": c["price"], "出品時の海外送料(円)": ship,
+                                                         "売値(ドル)": "%.2f" % price, "状態": "出品中", "出品日": now().strftime("%Y-%m-%d"),
+                                                         "タイトル": pl["title"], "eBayの状態ID": cond, "手数料率": d["fee"], "関税率": d["duty"],
+                                                         "固定費(円)": 0, "国内送料(円)": d["dom"], "為替": 152, "移した日時": "",
+                                                         "最後に値段を変えた日時": "", "メモ": "GitHubの判定と出品（%s・%s）" % (kind["名前"], how)})
+                                    except (EbayError, RuntimeError, KeyError) as e:
+                                        et = err_text(e)
+                                        r.update(結論="エラー", 理由=et[:500], SKU=sku)
+                                        errs.append((sku, et))
+        r["t"] = now().timestamp()
+        res.append(r)
+        if r["結論"] != "GASへ" and r["結論"] != "エラー":
+            done[c["id"]] = {"t": r["t"], "結論": r["結論"]}
+        time.sleep(0.5)
+    if rows:
+        save_ledger(rows, list(rows[0].keys()), NAME)
+    gas_note = ""
+    if gas_items and tt.get("GASにv664"):
+        try:
+            from flea_sweep import gas_post
+            gas_note = gas_post({"kind": "ghnew", "items": gas_items})[:200]
+        except Exception as e:
+            gas_note = "GASへの知らせに失敗：" + str(e)[:200]
+    save_json(done_p, done)
+    save_json(os.path.join(ROOT, "data", "判定", "記録", now().strftime("%Y%m%d_%H%M%S") + ".json"),
+              {"時刻": jst(), "本番": live, "Browseの残り": rem.get("remaining"), "結果": res})
+    cnt = collections.Counter(x["結論"] for x in res)
+    msg = ["【判定と出品】%s %s：%d品を判定（GitHubだけ）" % (jst(), "本番" if live else "影の運転", len(res)),
+           "・".join("%s %d" % kv for kv in cnt.most_common())]
+    why = collections.Counter(x.get("理由", "") for x in res if x["結論"] in ("見送り", "GASへ"))
+    if why:
+        msg.append("理由：" + "・".join("%s %d" % (k[:30], v) for k, v in why.most_common(5)))
+    if listed:
+        msg.append("出品した %d品：" % len(listed) + "・".join("%s $%.2f" % (t[:40], p) for _, _, t, p in listed[:10]))
+        if not tt.get("カナリア済み"):
+            msg.append("カナリア：公開ページを目で見てから カナリア済み を true に")
+    if errs:
+        msg.append("エラー：" + " / ".join("%s %s" % (s, e[:120]) for s, e in errs[:5]))
+    if gas_note.startswith("GASへの知らせに失敗"):
+        msg.append(gas_note)
+    if gas_items and not tt.get("GASにv664"):
+        msg.append("GASの出品一覧にはまだ載せていない（v664を貼ったら GASにv664 を true に）")
+    print("\n".join(msg))
+    notify("\n".join(msg))
+    write_run(NAME, not errs, len(listed), len(errs))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

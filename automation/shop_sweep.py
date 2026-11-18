@@ -183,6 +183,10 @@ def main():
     back = {c["id"]: c for c in load_json(back_p, []) if c.get("t", 0) >= now().timestamp() - 3 * 86400}
     for c in cands:
         back.setdefault(c["id"], c)
+    # GitHub の判定（判定と出品）が GO・見送りにした品は GAS に送らない（「GASへ」にした品だけ今までどおり送る）
+    gdone = load_json(os.path.join(ROOT, "data", "判定", "判定済み.json"), {})
+    for k in [k for k in back if k in gdone]:
+        back.pop(k)
     queue = sorted(back.values(), key=lambda c: c["ratio"])[: int(tt.get("送る待ちの上限_件", 1500))]
     n_send = int(tt.get("1回に送る上限_件", 30))
     if live and not tt.get("カナリア済み"):
