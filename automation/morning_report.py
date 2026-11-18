@@ -27,8 +27,25 @@ def main():
             continue
         if t == y:
             sold.append(d)
+    # 今月（PT）の売れた数・売上（経理の目安）
+    try:
+        m_sold = []
+        for f in glob.glob(os.path.join(ROOT, "data", "注文の記録", "*.json")):
+            dd = load_json(f, {})
+            try:
+                tt0 = dt.datetime.fromisoformat(dd.get("注文の時刻_UTC", "").replace("Z", "+00:00")).astimezone(PT).date()
+            except Exception:
+                continue
+            ref = y if today_pt.day == 1 else today_pt
+            if (tt0.year, tt0.month) == (ref.year, ref.month):
+                m_sold.append(dd)
+        month_line = "%s月（PT）の売れた数 %d品・売上 $%.2f" % ((y if today_pt.day == 1 else today_pt).month, len(m_sold), sum(num(x.get("売値")) or 0 for x in m_sold))
+    except Exception:
+        month_line = ""
     lines.append("昨日（PT %s）売れた：%d品 %s" % (y.strftime("%m/%d"), len(sold),
                                              ("（" + "・".join(s.get("SKU") or "SKUなし" for s in sold[:15]) + "）") if sold else ""))
+    if month_line:
+        lines.append(month_line)
     # 2) 出品の数と上限
     led = read_ledger()
     act = [r for r in led if r.get("状態") == "出品中"]
