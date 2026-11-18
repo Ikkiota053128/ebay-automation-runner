@@ -1,0 +1,69 @@
+# フリマ新着の地引網（日本時間 7:43・13:43・18:13・21:13（深掘り）。cron は UTC = 日本時間 −9時間）
+# 公開リポジトリ：プログラムだけ。台帳・記録・設定は非公開のデータ置き場（ebay-automation）を読み書きする。
+# 公開のログには件数も品名も出さない（中身は data/ログ/ に保存して、データ置き場へ）
+name: フリマ新着の地引網
+on:
+  schedule:
+    - cron: "43 22 * * *"
+    - cron: "43 4 * * *"
+    - cron: "13 9 * * *"
+    - cron: "13 12 * * *"
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: 試しに読む検索語の数（空なら時刻表どおり）
+        required: false
+        default: ""
+      resend:
+        description: "1 にすると、ページは開かずに最新の記録のまだ送っていない候補だけ送る"
+        required: false
+        default: ""
+      deep:
+        description: "1 にすると深掘り（各検索語の2〜4ページ目）"
+        required: false
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: flea-sweep
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ikkiota053128/ebay-automation
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data_repo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: フリマ新着の地引網
+        env:
+          LEDGER_ROOT: ${{ github.workspace }}/data_repo
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          GAS_WEBAPP_URL: ${{ secrets.GAS_WEBAPP_URL }}
+          GAS_SEND_TOKEN: ${{ secrets.GAS_SEND_TOKEN }}
+          DEEP: ${{ (github.event.schedule == '13 12 * * *' || github.event.inputs.deep == '1') && '1' || '' }}
+          TEST_PAGES: ${{ github.event.inputs.pages }}
+          RESEND_LATEST: ${{ github.event.inputs.resend }}
+        run: |
+          mkdir -p data_repo/data/ログ
+          rc=0
+          python3 automation/flea_sweep.py > "data_repo/data/ログ/flea_sweep.log" 2>&1 || rc=$?
+          echo "終わり（コード $rc）。中身はデータ置き場の data/ログ/flea_sweep.log"
+          exit $rc
+      - name: 台帳と記録をデータ置き場に保存
+        if: always()
+        working-directory: data_repo
+        run: |
+          git config user.name "ebay-automation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/ 台帳.csv 2>/dev/null || git add data/
+          git diff --cached --quiet && exit 0
+          git commit -q -m "フリマ新着の地引網：記録 $(TZ=Asia/Tokyo date '+%m/%d %H:%M') JST"
+          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
+          echo "保存に失敗"; exit 1
