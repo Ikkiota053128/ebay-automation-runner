@@ -18,6 +18,7 @@ from price_adjust import model_of
 import judge
 from bulk_list import build, list_one, location_key, mkey, same_model
 from stock_watch import kind_of
+from shop_sweep import bad_shop
 
 NAME = "判定と出品"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -321,6 +322,8 @@ def main():
         dup = next((m for m in live_models if same_model(k, m)), None)
         if dup:
             r.update(結論="見送り", 理由="同じ型番がもう出品中（%s）" % dup)
+        elif bad_shop(c["url"]):
+            r.update(結論="見送り", 理由="店の規約で使わない店（転売の購入を断る・転載の禁止）")
         elif judge.RULE_OUT.search(judge.plain(c["title"])) or judge.RULE_OUT.search(c["型番"]):
             r.update(結論="見送り", 理由="キャラクター・ゲーム・限定品（決めごとA）")
         elif ip_bad(c["title"]):

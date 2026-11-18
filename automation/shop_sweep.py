@@ -65,7 +65,22 @@ def yahoo(m, appid):
     return code, items
 
 
+_BAD_SHOPS = None
+
+
+def bad_shop(url):
+    """楽天・Yahoo!の店の規約で使わない店（mall_terms.py が data/判定/使わない店.json に書く）"""
+    global _BAD_SHOPS
+    if _BAD_SHOPS is None:
+        from common import ROOT as _R, load_json as _lj
+        _BAD_SHOPS = set(_lj(os.path.join(_R, "data", "判定", "使わない店.json"), {}).get("店", []))
+    from mall_terms import shop_of
+    return shop_of(url) in _BAD_SHOPS
+
+
 def keep(it, m):
+    if bad_shop(it.get("url")):
+        return "店の規約で使わない店（転売の購入を断る・転載の禁止）"
     t = it["title"]
     if not it["price"] or (m["cap"] and it["price"] > m["cap"]):
         return "上限より高い"
