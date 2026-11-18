@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ledger
+  group: ledger-stock_watch
   cancel-in-progress: false
 jobs:
   run:

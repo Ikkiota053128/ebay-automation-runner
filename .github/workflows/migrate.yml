@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ledger
+  group: ledger-migrate
   cancel-in-progress: false
 jobs:
   run:

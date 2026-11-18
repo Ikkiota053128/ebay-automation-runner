@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ledger
+  group: ledger-bulk_list
   cancel-in-progress: false
 jobs:
   run:
