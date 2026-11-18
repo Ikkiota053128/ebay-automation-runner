@@ -49,6 +49,25 @@ def photos_of(c):
     return out[:12]
 
 
+BAD_CAT = re.compile(r"part|accessor|case|bag|strap|cable|charger|battery|book|manual|video game|game|toy|figure|doll|card|"
+                     r"amplifier|speaker|furniture|guitar$|bass$|drum|keyboard|piano|tripod|stand", re.I)
+
+
+def auto_kind(cat, kinds):
+    """決めてある種類に無いカテゴリ：名前は eBay のカテゴリ名、重さと箱は前に出した実績（型番の実績）のそのカテゴリで一番多い値、
+    無ければ安全側の 1,200g・26x20x16（送料を多めに見る）。付属品・ゲーム・大きい物のカテゴリは扱わない"""
+    name = judge.CAT_NAMES.get(cat, "")
+    if not cat or not name or BAD_CAT.search(name):
+        return None
+    profs = load_json(os.path.join(ROOT, "data", "判定", "型番の実績.json"), {})
+    pk = collections.Counter((p["重さ_g"], p["箱"]) for p in profs.values() if str(p.get("カテゴリ")) == cat and p.get("発送") == "FedEx").most_common(1)
+    w, bx = pk[0][0] if pk else (1200, "26x20x16")
+    word = re.sub(r"\s*&.*$|\s*\(.*\)$", "", name).strip()
+    word = re.sub(r"s$", "", word) if len(word) > 4 and not word.endswith("ss") else word
+    return {"名前": "自動：" + name, "言葉": word[:30], "重さ_g": int(w), "箱": bx, "項目": ["Type"], "手数料率": 0.1742, "関税率": 0.15,
+            "ポリシー": {"発送": "327189638011", "支払い": "318927569011", "返品": "318925133011"}}
+
+
 def more_photos(c):
     """Yahoo!ショッピングは、APIの写真が1枚だけ。商品ページ（GitHub から読める）から同じ商品の写真（_1, _2 …）を集める。楽天のページは読めない"""
     ph = photos_of(c)
@@ -109,7 +128,7 @@ def promote_new(eb, rate):
     GAS と同じキャンペーン。広告率は 手数料率（17.42%）に入れてある広告の見込みの中。1件ずつ結果を見る"""
     p = os.path.join(ROOT, "data", "判定", "広告済み.json")
     done = load_json(p, {})
-    ids = [r["eBayの出品ID"] for r in read_ledger() if "GitHubの判定と出品" in (r.get("メモ") or "") and r.get("状態") == "出品中"
+    ids = [r["eBayの出品ID"] for r in read_ledger() if r.get("offerId") and r.get("状態") == "出品中"   # GitHub が見ている出品すべて（広告の点検もGitHubで）
            and r.get("eBayの出品ID") and r["eBayの出品ID"] not in done]
     if not ids:
         return ""
@@ -251,9 +270,9 @@ def main():
             r.update(結論="GASへ", 理由="在庫の監視が見られない仕入元")
         else:
             cond = judge.cond_of(c["title"])
-            if cond is None:
-                r.update(結論="GASへ", 理由="新品か中古か商品名から読めない")
-            else:
+            if cond is None:   # 11/18 オーナー「GitHubで」：読めない品は中古として出す（実物より悪く書く側にそろえる）
+                cond = 3000
+            if True:
                 cats = []
                 try:
                     act = judge.comps(eb, c["型番"], cond, me, my_ids, cats)
@@ -268,7 +287,7 @@ def main():
                     continue
                 cc = collections.Counter(cats).most_common(1)
                 cat = cc[0][0] if cc and cc[0][1] * 2 >= len(cats) else ""
-                kind = kinds.get(cat)
+                kind = kinds.get(cat) or auto_kind(cat, kinds)
                 r.update(競合の数=len(act), 競合=act[:5], カテゴリ=cat)
                 if len(act) < 2:
                     r.update(結論="GASへ", 理由="同じ型番の競合が2件未満")

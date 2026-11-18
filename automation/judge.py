@@ -96,6 +96,9 @@ def cond_of(title_ja):
     return None
 
 
+CAT_NAMES = {}   # eBay のカテゴリ番号 → 名前（競合の出品から）
+
+
 def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
     """同じ型番・同じ状態・即決・送料込み（米国の買い手に見える送料）。値段の調整と同じ外し方。返事：送料込みの値段（安い順）
     cats にリストを渡すと、残った競合の一番下のカテゴリ（leafCategoryIds）を入れる"""
@@ -114,6 +117,9 @@ def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
             continue
         so = it.get("shippingOptions") or []
         sh = num(so[0]["shippingCost"].get("value")) if so and so[0].get("shippingCost") else 0.0
+        for cc in it.get("categories") or []:
+            if cc.get("categoryId") and cc.get("categoryName"):
+                CAT_NAMES.setdefault(str(cc["categoryId"]), cc["categoryName"])
         out.append({"p": round(p + (sh or 0), 2), "t": t, "c": str((it.get("leafCategoryIds") or [""])[0])})
     kept = clean(out)
     if kept and not cat:

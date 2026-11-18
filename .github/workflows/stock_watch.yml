@@ -35,6 +35,7 @@ jobs:
           RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
           RAKUTEN_RELAY_URL: ${{ secrets.RAKUTEN_RELAY_URL }}
           RAKUTEN_RELAY_TOKEN: ${{ secrets.RAKUTEN_RELAY_TOKEN }}
+          YAHOO_CLIENT_ID: ${{ secrets.YAHOO_CLIENT_ID }}
           NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
         run: |
           mkdir -p data_repo/data/ログ

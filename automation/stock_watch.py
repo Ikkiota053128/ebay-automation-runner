@@ -150,6 +150,46 @@ def main():
     msg = ["【在庫の監視】%s %s：見た %d品（ある %d・ない %d・読めなかった %d）" %
            (jst(), "本番" if live else "ドライラン", len(out["ある"]) + len(out["ない"]) + len(out["読めない"]),
             len(out["ある"]), len(out["ない"]), len(out["読めない"]))]
+    # 予備の仕入れ先（GAS の ysBackup_ と同じ考え方）：仕入元で売り切れた品は、楽天・Yahoo!ショッピングで同じ型番の在庫ありの品を探す。
+    # 仕入値が前の仕入値以下（＝利益が減らない）で、商品名に型番がはっきりある品が見つかれば、仕入元を付け替えて在庫を0にしない
+    switched = []
+    if zero:
+        try:
+            from price_adjust import model_of
+            from shop_sweep import rakuten, yahoo, keep
+            from flea_sweep import compile_models
+            rk = {"id": os.environ.get("RAKUTEN_APP_ID", "").strip(), "access": os.environ.get("RAKUTEN_ACCESS_KEY", "").strip(),
+                  "relay": os.environ.get("RAKUTEN_RELAY_URL", "").strip(), "relay_token": os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()}
+            ya = os.environ.get("YAHOO_CLIENT_ID", "").strip()
+            keep_zero = []
+            for r in zero:
+                md = model_of(r.get("タイトル"))
+                cost = num(r.get("仕入値(円)")) or 0
+                if not md or not cost:
+                    keep_zero.append(r)
+                    continue
+                m = compile_models([{"maker": (r.get("タイトル") or "").split(" ")[0], "model": md, "cap": int(cost)}])[0]
+                best = None
+                for fn, ok in ((lambda mm: rakuten(mm, rk), rk["id"] and rk["access"]), (lambda mm: yahoo(mm, ya), ya)):
+                    if not ok:
+                        continue
+                    code, items = fn(m)
+                    time.sleep(3)
+                    for it in items:
+                        if it["url"] != r.get("仕入元URL") and not keep(it, m) and it["price"] <= cost and (not best or it["price"] < best["price"]):
+                            best = it
+                if best:
+                    switched.append({"SKU": r["SKU"], "仕入元URL": best["url"], "仕入値(円)": best["price"],
+                                     "メモ": ((r.get("メモ") or "") + "・%s 予備の仕入れ先に付け替え（前：%s %s円）" % (jst(), r.get("仕入元URL"), int(cost)))[:500]})
+                else:
+                    keep_zero.append(r)
+            zero = keep_zero
+            if switched:
+                if live:
+                    save_ledger(switched, ["仕入元URL", "仕入値(円)", "メモ"], NAME)
+                msg.append("予備の仕入れ先に付け替え%s %d品：%s" % ("" if live else "（案）", len(switched), ", ".join(x["SKU"] for x in switched[:10])))
+        except Exception as e:
+            msg.append("予備の仕入れ先を探せなかった：%s" % str(e)[:120])
     cap = int(tt.get("1回に在庫ゼロにする上限_件", 20))
     done, bad = [], []
     if zero:
