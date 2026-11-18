@@ -234,7 +234,7 @@ def main():
     msg += ["見送り %s：%s" % s for s in skip[:10]]
     if gas_note.startswith("GASへの書き戻しに失敗"):
         msg.append(gas_note)
-    save_json(os.path.join(ROOT, "data", "出品", now().strftime("%Y%m%d_%H%M") + ".json"),
+    save_json(os.path.join(ROOT, "data", "出品", now().strftime("%Y%m%d_%H%M%S") + ".json"),
               {"時刻": jst(), "本番": live, "待ち": len(queue), "出品": done, "失敗": bad, "見送り": skip})
     write_run(NAME, not bad, len(done), len(bad))
     print("\n".join(msg))

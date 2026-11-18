@@ -106,7 +106,7 @@ def shadow_judge(cands, n):
                 out.append(judge.judge(eb, c, profs, st, qs, me, my_ids, fx))
             except Exception as e:   # 1品の失敗で全体を止めない
                 out.append({"url": c["url"], "型番": c["型番"], "結論": "エラー", "理由": str(e)[:300]})
-        save_json(os.path.join(ROOT, "data", "判定", "影", now().strftime("%Y%m%d_%H%M") + ".json"), out)
+        save_json(os.path.join(ROOT, "data", "判定", "影", now().strftime("%Y%m%d_%H%M%S") + ".json"), out)
         go = sum(1 for x in out if x["結論"] == "GO")
         return "判定の影：%d品を判定 → GO %d・見送り %d（記録だけ。GASの答えと比べる）" % (len(out), go, len(out) - go)
     except Exception as e:
@@ -205,7 +205,7 @@ def main():
     save_json(back_p, [c for c in queue if c["id"] not in sent_ids])
     rec = {"時刻": jst(), "本番": live, "送る待ち": len(queue) - len(sent_ids), "見た型番": done, "型番の数": len(models), "数": stat, "外した理由": why,
            "候補": [{k: c[k] for k in ("src", "型番", "price", "title", "url")} for c in cands], "送った": sent}
-    save_json(os.path.join(ROOT, "data", "店の地引網", now().strftime("%Y%m%d_%H%M") + ".json"), rec)
+    save_json(os.path.join(ROOT, "data", "店の地引網", now().strftime("%Y%m%d_%H%M%S") + ".json"), rec)
     msg = ["【店の地引網】%s %s：型番 %d／%d個を見た" % (jst(), "本番" if live else "ドライラン", done, len(models))]
     for s, v in stat.items():
         msg.append("%s：API %d回・新しく見た品 %d・候補 %d" % (s, v["API"], v["見た"], v["残った"]))
