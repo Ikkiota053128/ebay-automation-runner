@@ -12,7 +12,8 @@
 import collections, json, os, re, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import (ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
-                    mark_started, load_json, save_json, browse_stopped, browse_stop)
+                    mark_started, load_json, save_json, browse_stopped, browse_stop, listing_limit_stopped, listing_limit_stop,
+                    is_limit_error)
 from price_adjust import model_of
 import judge
 from bulk_list import build, list_one, location_key, mkey, same_model
@@ -131,6 +132,11 @@ def main():
         print(wd_note)
         notify("【判定と出品】" + wd_note)
         wd_note = ""
+    ls = listing_limit_stopped()
+    if ls and live:
+        print("eBay の出品の上限に当たったので、%s まで出品しない（判定もしない）" % ls["再開してよい時刻"][:16])
+        write_run(NAME, True, 0, 0)
+        return 0
     if browse_stopped():
         write_run(NAME, True, 0, 0)
         print("検索の回数上限で止めている")
@@ -223,7 +229,7 @@ def main():
                         else:
                             r.update(結論="GO")
                             live_models.append(k)
-                            if live and len(listed) < n_list:
+                            if live and len(listed) < n_list and not listing_limit_stopped():
                                 sku = next_sku(c, 0)
                                 pl = make_payload(c, kind, cat, cond, price, fp, ship, sku)
                                 item, offer, why = build(pl, loc)
@@ -247,6 +253,9 @@ def main():
                                         et = err_text(e)
                                         r.update(結論="エラー", 理由=et[:500], SKU=sku)
                                         errs.append((sku, et))
+                                        if is_limit_error(et):   # 月の上限：この回はもう出さない・次の月まで止める
+                                            listing_limit_stop(et)
+                                            n_list = 0
         r["t"] = now().timestamp()
         res.append(r)
         if live and r["結論"] in ("GO", "見送り") and (r["結論"] == "見送り" or r.get("出品")):   # 影の運転の間は記録しない（GAS に今までどおり送る）

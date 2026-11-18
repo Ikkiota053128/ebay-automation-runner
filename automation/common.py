@@ -212,6 +212,35 @@ def err_text(e):
 STOP = os.path.join(ROOT, "data", "停止", "browse.json")
 
 
+LIMIT_STOP = os.path.join(ROOT, "data", "停止", "出品の上限.json")
+
+
+def is_limit_error(text):
+    """eBay の出品の上限（金額・件数）に当たった：25002 ... exceed the amount you can list"""
+    t = str(text or "")
+    return "exceed the amount you can list" in t or "exceed the number of items you can list" in t or "selling limit" in t.lower()
+
+
+def listing_limit_stopped():
+    d = load_json(LIMIT_STOP)
+    if not d:
+        return None
+    try:
+        if now() < dt.datetime.fromisoformat(d["再開してよい時刻"]):
+            return d
+    except Exception:
+        return None
+    return None
+
+
+def listing_limit_stop(msg):
+    """月の上限なので、次の月の1日（米国太平洋時間 0:00 ＝ 日本時間 17:00）まで出品を止める。上限を上げてもらったら、このファイルを消せば再開"""
+    pt = now().astimezone(dt.timezone(dt.timedelta(hours=-8)))
+    nxt = (pt.replace(day=28) + dt.timedelta(days=4)).replace(day=1, hour=0, minute=5, second=0, microsecond=0)
+    save_json(LIMIT_STOP, {"止めた時刻": jst(), "再開してよい時刻": nxt.astimezone(JST).isoformat(), "eBayの返事": str(msg)[:600],
+                           "_説明": "eBay の出品の上限（月）。上限を上げてもらったら、このファイルを消すと再開"})
+
+
 def browse_stopped():
     d = load_json(STOP)
     if not d:

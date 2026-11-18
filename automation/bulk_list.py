@@ -5,6 +5,7 @@
 #  時刻表.json の「実行」が false の間はドライラン（出品データを点検するだけ。eBayには出さない・GASにも返さない）。
 import json, os, sys, urllib.parse, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import (listing_limit_stopped, listing_limit_stop, is_limit_error)
 from common import (ROOT, Ebay, EbayError, err_text, num, now, jst, settings, timetable, notify, notify_once_a_day,
                     read_ledger, save_ledger, write_run, mark_started, load_json, save_json)
 from stock_watch import kind_of
@@ -164,6 +165,11 @@ def main():
         notify_once_a_day("鍵なし_一括の出品", "【一括の出品】GitHub の Secrets が空なので、何もしていません：" + "・".join(miss))
         write_run(NAME, False, 0, 1)
         return 0
+    ls = listing_limit_stopped()
+    if ls and live:
+        print("eBay の出品の上限に当たったので、%s まで出品しない（待ちの品はGASのシートに残る）" % ls["再開してよい時刻"][:16])
+        write_run(NAME, True, 0, 0)
+        return 0
     queue = gas_queue()
     cap = int(tt.get("1回の出品の上限_件", 50))
     if live and not tt.get("カナリア済み"):
@@ -203,6 +209,10 @@ def main():
             lid, oid = list_one(eb, pl, item, offer)
         except (EbayError, RuntimeError, KeyError) as e:
             et = err_text(e)
+            if is_limit_error(et):   # 月の上限：この品は「待ち」のまま残す（GASに返さない）・次の月まで止める
+                listing_limit_stop(et)
+                bad.append((pl["sku"], "eBayの出品の上限（月）に当たった。待ちのまま残す"))
+                break
             bad.append((pl["sku"], et))
             results.append({"sku": pl["sku"], "error": et})
             continue
