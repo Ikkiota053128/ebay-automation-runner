@@ -33,6 +33,9 @@ def main():
             ack = (re.search(r"<Ack>(\w+)</Ack>", x) or [None, ""])[1]
             if ack not in ("Success", "Warning"):
                 msgs = re.findall(r"<LongMessage>([^<]*)</LongMessage>", x)
+                if any("ended" in m.lower() for m in msgs):   # eBay ではもう終わっている → 台帳を「終了」に
+                    rows.append({"SKU": r["SKU"], "状態": "終了", "メモ": (r.get("メモ", "") + "・%s eBayではもう終わっていた" % jst())[:500]})
+                    continue
                 bad.append("%s %s" % (iid, " / ".join(msgs)[:200]))
                 continue
             time.sleep(0.5)
