@@ -14,6 +14,7 @@ while True:
                       "始まり": g("StartTime")[:10], "ウォッチ": int(g("WatchCount") or 0),
                       "在庫": int(g("QuantityAvailable") or (int(g("Quantity") or 0) - int((re.search(r"<QuantitySold>(\d+)</QuantitySold>", b) or [None, "0"])[1])))})
     tp = int((re.search(r"<TotalNumberOfPages>(\d+)</TotalNumberOfPages>", x) or [None, "1"])[1])
+    total_entries = int((re.search(r"<TotalNumberOfEntries>(\d+)</TotalNumberOfEntries>", x) or [None, "0"])[1])
     if page >= tp:
         break
     page += 1
@@ -26,7 +27,7 @@ for it in items:
         it["日数"] = None
 items.sort(key=lambda i: -(i["日数"] or 0))
 b = {"60日以上": [i for i in items if (i["日数"] or 0) >= 60], "30〜59日": [i for i in items if 30 <= (i["日数"] or 0) < 60]}
-save_json(os.path.join(ROOT, "data", "上限", "売れていない出品.json"), {"時刻": jst(), "出品中": len(items), "合計ドル": round(sum(i["値段"] for i in items), 2), "在庫1以上": sum(1 for i in items if i["在庫"] > 0),
+save_json(os.path.join(ROOT, "data", "上限", "売れていない出品.json"), {"時刻": jst(), "eBayが言う出品中の数": total_entries, "出品中": len(items), "合計ドル": round(sum(i["値段"] for i in items), 2), "在庫1以上": sum(1 for i in items if i["在庫"] > 0),
           "在庫1以上の合計ドル": round(sum(i["値段"] for i in items if i["在庫"] > 0), 2),
           "60日以上": b["60日以上"], "30〜59日": b["30〜59日"]})
 save_json(os.path.join(ROOT, "data", "上限", "eBayの出品中.json"), {"時刻": jst(), "品": [{k: i[k] for k in ("出品ID", "SKU", "値段", "在庫", "始まり", "ウォッチ", "タイトル")} for i in items]})
