@@ -1,0 +1,112 @@
+"""① 受注の通知（CLAUDE.md 2章・5章・9章）：支払い済みの新しい注文をスマホ（Discord）に知らせ、台帳を「売れた」にする。
+
+- 注文は Fulfillment API（getOrders）。数えるのは支払い済み（PAID）だけ。キャンセルは数えない。
+- 買い手の名前・住所・ID・注文番号は、知らせにもログにも出さない（AIに見せない・設計書4章）。
+  記録（data/注文の記録/）には注文番号と SKU・金額・時刻だけ。買い手の欄は保存しない。知らせは SKU・タイトル・売値・仕入元URL。
+- 同じ注文を2回知らせない（通知済みは注文番号のハッシュで data/受注の通知/通知済み.json に残す）。
+- 始めた日時より前の注文は一斉に知らせない。ただし始める前から「支払い済み・まだ発送していない」注文は、1回だけ一覧（SKUだけ）で知らせる。
+- 見張り：朝の報告が「導入済み」なら、その実行記録が26時間より古いときに知らせる。
+"""
+import datetime as dt, hashlib, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import (ROOT, Ebay, EbayError, err_text, now, jst, timetable, notify, notify_once_a_day, read_ledger, save_ledger,
+                    write_run, mark_started, load_json, save_json, num)
+
+NAME = "受注の通知"
+
+
+def h(s):
+    return hashlib.sha256(str(s).encode()).hexdigest()[:24]
+
+
+def orders_since(eb, since_utc):
+    out, off = [], 0
+    while True:
+        _, j = eb.call("GET", "/sell/fulfillment/v1/order?filter=creationdate:%%5B%s..%%5D&limit=200&offset=%d" % (since_utc, off))
+        out += j.get("orders", [])
+        if len(j.get("orders", [])) < 200 or off > 2000:
+            return out
+        off += 200
+
+
+def main():
+    tt = timetable(NAME)
+    eb = Ebay()
+    mark_started(NAME)
+    if not eb.ready():
+        notify_once_a_day("鍵なし_受注", "【受注の通知】GitHub に eBay の鍵が無いので、何もしていません")
+        write_run(NAME, False, 0, 1)
+        return 0
+    st_p = os.path.join(ROOT, "data", "受注の通知", "始めた日時.json")
+    st = load_json(st_p, {})
+    first = not st
+    if first:
+        st = {"始めた日時_UTC": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"), "JST": jst()}
+        save_json(st_p, st)
+    sent_p = os.path.join(ROOT, "data", "受注の通知", "通知済み.json")
+    sent = load_json(sent_p, {})
+    since = (dt.datetime.utcnow() - dt.timedelta(days=int(tt.get("見る日数", 3)))).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    try:
+        orders = orders_since(eb, since)
+    except EbayError as e:
+        notify("【受注の通知】注文を読めませんでした：" + err_text(e)[:300])
+        write_run(NAME, False, 0, 1)
+        return 1
+    led = {r["SKU"]: r for r in read_ledger()}
+    new, before_unshipped, rows = [], [], []
+    for o in orders:
+        if o.get("orderPaymentStatus") != "PAID" or (o.get("cancelStatus") or {}).get("cancelState") == "CANCELED":
+            continue
+        for li in o.get("lineItems", []):
+            key = h(o.get("orderId", "") + "|" + li.get("lineItemId", ""))
+            if key in sent:
+                continue
+            sku = li.get("sku") or ""
+            item = {"SKU": sku, "出品ID": li.get("legacyItemId", ""), "数": li.get("quantity", 1),
+                    "売値": (li.get("total") or li.get("lineItemCost") or {}).get("value", ""), "注文の時刻_UTC": o.get("creationDate", "")}
+            if o.get("creationDate", "") < st["始めた日時_UTC"]:
+                if o.get("orderFulfillmentStatus") != "FULFILLED":
+                    before_unshipped.append(item)
+                sent[key] = jst()
+                continue
+            new.append(item)
+            # 記録（プログラムだけが使う。買い手の欄は入れない）
+            save_json(os.path.join(ROOT, "data", "注文の記録", now().strftime("%Y%m%d") + "_" + key + ".json"),
+                      dict(item, 注文番号=o.get("orderId", ""), 明細番号=li.get("lineItemId", "")))
+            r = led.get(sku)
+            if r and r.get("状態") in ("出品中", "在庫ゼロ"):
+                rows.append({"SKU": sku, "状態": "売れた"})
+            sent[key] = jst()
+    if rows:
+        save_ledger(rows, ["状態"], NAME)
+    msgs = []
+    for it in new:
+        r = led.get(it["SKU"]) or {}
+        msgs.append("【売れた】%s %s\n%s\n売値 $%s・仕入値 %s円\n仕入元：%s\n→ すぐ仕入れて、仕入れたら「%s 仕入れた」と Claude に" % (
+            jst(), it["SKU"] or "(SKUなし・GASの出品)", (r.get("タイトル") or "")[:80], it["売値"], r.get("仕入値(円)", "?"),
+            r.get("仕入元URL") or "（台帳に無い：GASのシートの出品一覧を見てください）", it["SKU"] or "出品ID " + str(it["出品ID"])))
+    if first and before_unshipped and not st.get("前からの未発送を知らせた"):
+        msgs.append("【受注の通知を始めました】始める前から「支払い済み・まだ発送していない」注文 %d件（SKU）：%s\n台帳を「売れた」にするか教えてください" % (
+            len(before_unshipped), "・".join(x["SKU"] or "出品ID " + str(x["出品ID"]) for x in before_unshipped[:30])))
+        st["前からの未発送を知らせた"] = jst()
+        save_json(st_p, st)
+    # 見張り：朝の報告が止まっていないか
+    mr = load_json(os.path.join(ROOT, "時刻表.json"), {}).get("プログラム", {}).get("朝の報告", {})
+    if mr.get("導入済み"):
+        rec = load_json(os.path.join(ROOT, "data", "実行記録", "朝の報告.json"), {})
+        try:
+            last = dt.datetime.strptime(rec.get("最後に動いた時刻JST", ""), "%Y-%m-%d %H:%M").replace(tzinfo=now().tzinfo)
+            if (now() - last).total_seconds() > 26 * 3600:
+                notify_once_a_day("朝の報告が止まった", "【見張り】朝の報告が26時間以上動いていません")
+        except Exception:
+            pass
+    for m in msgs:   # 知らせに失敗したら例外 → この回は失敗（通知済みにしない）
+        notify(m)
+    save_json(sent_p, sent)
+    print("【受注の通知】%s 新しい注文 %d品・台帳を売れたに %d品%s" % (jst(), len(new), len(rows), "（初回：前からの未発送 %d件）" % len(before_unshipped) if first else ""))
+    write_run(NAME, True, len(new), 0)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
