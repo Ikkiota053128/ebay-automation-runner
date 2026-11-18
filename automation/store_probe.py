@@ -5,11 +5,26 @@ from common import ROOT, save_json, jst
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 STORES2 = [
-    ("フジヤ_a", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx?search=x&keyword=Nikon+D3300"),
-    ("フジヤ_b", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx?keyword=Nikon%20D3300&search=%E6%A4%9C%E7%B4%A2"),
-    ("フジヤ_c", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx?q=Nikon+D3300"),
-    ("フジヤ_d", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx"),
-    ("八百富_s", "https://www.yaotomi.co.jp", "/search?q=Nikon%20D3300&type=product"),
+    ("コメ兵", "https://komehyo.jp", "/search/?q=SEIKO"),
+    ("ブックオフ", "https://shopping.bookoff.co.jp", "/search/keyword/BOSS"),
+    ("ソフマップ", "https://www.sofmap.com", "/search_result.aspx?keyword=Nikon"),
+    ("カメラのナニワ", "https://www.naniwa-camera.co.jp", "/search?q=Nikon"),
+    ("レモン社", "https://www.lemonsha.com", "/search?q=Nikon"),
+    ("大貫カメラ", "https://www.ohnuki.co.jp", "/search?q=Nikon"),
+    ("三宝カメラ", "https://www.sanpou-camera.jp", "/search?q=Nikon"),
+    ("クロサワ楽器", "https://www.kurosawagakki.com", "/search?keyword=BOSS"),
+    ("イケベ楽器", "https://www.ikebe-gakki.com", "/Form/Product/ProductList.aspx?kw=BOSS"),
+    ("島村楽器", "https://www.shimamura.co.jp", "/shop/search?q=BOSS"),
+    ("ジャックロード", "https://www.jackroad.co.jp", "/shop/goods/search.aspx?keyword=SEIKO"),
+    ("ブランドオフ", "https://www.brandoff.co.jp", "/search?q=SEIKO"),
+    ("エコリング", "https://www.ecoring.co.jp", "/"),
+    ("じゃんぱら", "https://www.janpara.co.jp", "/sale/search/result/?KEYWORDS=Nikon"),
+    ("駿河屋", "https://www.suruga-ya.jp", "/search?search_word=Nikon"),
+    ("デジタルウォッチ", "https://www.digital-watch.jp", "/"),
+    ("カメラのキタムラ中古（ネット）", "https://www.net-chuko.com", "/"),
+    ("ゴルフドゥ", "https://www.golfdo.com", "/"),
+    ("宝石広場", "https://www.houseki-hiroba.co.jp", "/"),
+    ("楽器のキャットミュージック", "https://www.catmusic.jp", "/"),
 ]
 STORES = [
     ("イシバシ楽器", "https://www.ishibashi.co.jp", "/ec/search?q=BOSS%20DD-3"),
