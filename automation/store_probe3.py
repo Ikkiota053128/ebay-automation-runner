@@ -5,10 +5,9 @@ from common import ROOT, save_json, jst
 from stock_watch import fetch
 
 STORES = {
-    "レモン社": ("https://lemonsha.com/", 4, ["https://lemonsha.com/?s=Nikon", "https://lemonsha.com/search/?q=Nikon"]),
-    "大貫カメラ": ("https://www.ohnuki.co.jp/", 4, ["https://www.ohnuki.co.jp/?s=Nikon", "https://www.ohnuki.co.jp/shop/search?keyword=Nikon"]),
-    "クロサワ楽器": ("https://www.kurosawagakki.com/", 4, ["https://www.kurosawagakki.com/search?q=BOSS", "https://www.kurosawagakki.com/products/list?keyword=BOSS"]),
-    "じゃんぱら": ("https://www.janpara.co.jp/", 61, ["https://www.janpara.co.jp/sale/search/result/?KEYWORDS=Nikon"]),
+    "カメラのナニワ（レモン社）": ("https://cameranonaniwa.jp/shop/default.aspx", 4, ["https://cameranonaniwa.jp/shop/goods/search.aspx?keyword=Nikon", "https://cameranonaniwa.jp/shop/goods/search.aspx?search=x&keyword=Nikon"]),
+    "クロサワ楽器": ("https://shop.kurosawagakki.com/", 4, ["https://shop.kurosawagakki.com/search?q=BOSS", "https://shop.kurosawagakki.com/products/list?keyword=BOSS"]),
+    "じゃんぱら（免責）": ("https://www.janpara.co.jp/contents/disclaimer/", 61, []),
 }
 KEY = re.compile(r"転売|営利|再販|業者|転載|二次利用|複製|無断|ロボット|クローラ|スクレイピング|自動化|自動的|機械的|プログラム")
 
