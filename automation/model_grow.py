@@ -20,6 +20,14 @@ BIG = re.compile(r"RB67|RZ67|PENTAX\s?67|PENTAX\s?6x7|Mamiya\s?7\b|6x7|4x5|Gimba
 ADD_P = os.path.join(ROOT, "data", "型番リスト", "追加.json")
 
 
+# リールの「大きさの記号」（C3000HG・SW8000HG・LT2500S など）は、ステラ・ツインパワーなど別の製品で同じなので型番にしない
+REEL_SIZE = re.compile(r"^(C|SW|LT|FC|CT)?-?\d{3,5}[A-Z]{0,4}$", re.I)
+
+
+def size_code(maker, model):
+    return bool(re.search(r"shimano|daiwa|abu|penn", str(maker), re.I)) and bool(REEL_SIZE.match(str(model).replace(" ", "")))
+
+
 def mkey(s):
     return re.sub(r"[^A-Z0-9]", "", str(s or "").upper())
 
@@ -58,6 +66,8 @@ def grow_one(eb, maker_en, model, have, st):
         if len(ps) < 3 or k in have or len(k) < 4:
             continue
         med = ps[len(ps) // 2]
+        if size_code(maker_en, v["md"]):
+            continue
         if med < st["最低の中央値_ドル"] or BIG.search(v["t"] + " " + v["md"]) or judge.RULE_OUT.search(v["t"]):
             continue
         out.append({"maker": maker_en, "model": v["md"], "n": len(ps), "med": med, "例": v["t"][:80]})
