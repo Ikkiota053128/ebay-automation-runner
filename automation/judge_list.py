@@ -102,7 +102,8 @@ def gas_cands():
             m = hit[0] if isinstance(hit, list) else hit
             out.append({"id": "gas:" + it["url"], "title": it["title"], "price": int(it["price"]), "url": it["url"],
                         "photos": [u for u in str(it.get("thumb", "")).split("\n") if u.startswith("http")],
-                        "型番": m["model"], "メーカー": m["maker"], "src": re.sub(r"（.*$", "", it.get("site", "GAS")) or "GAS", "cap": int(it.get("cap") or 0)})
+                        "型番": m["model"], "メーカー": m["maker"], "src": re.sub(r"（.*$", "", it.get("site", "GAS")) or "GAS", "cap": int(it.get("cap") or 0),
+                        **({"dom": int(it["dom"])} if it.get("dom") is not None else {})})
         return out
     except Exception as e:
         print("GASの候補を読めなかった：", type(e).__name__)
@@ -220,7 +221,7 @@ def next_sku(c, n):
     d = load_json(p, {"n": 0})
     d["n"] = int(d["n"]) + 1
     save_json(p, d)
-    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR", "Amazon（人）": "AZ"}.get(c["src"], "ST")
+    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR", "Amazon（人）": "AZ", "メルカリ": "MR"}.get(c["src"], "ST")
     return "G%s-%06d" % (code, d["n"])
 
 
@@ -423,7 +424,7 @@ def main():
     if rows:
         save_ledger(rows, list(rows[0].keys()), NAME)
     # 店のサイトの地引網の品で「GASへ」になったものは、ここから GAS に送る（店の地引網の品は、店の地引網が送る）
-    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!") and not str(c.get("id", "")).startswith("人:") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
+    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!") and not str(c.get("id", "")).startswith(("人:", "gas:")) and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
     if live and to_gas:
         try:
             from flea_sweep import gas_post
