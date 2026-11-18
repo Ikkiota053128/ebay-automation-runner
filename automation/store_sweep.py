@@ -18,7 +18,7 @@ CAM = r"nikon|canon|sony|olympus|pentax|fujifilm|fuji|panasonic|ricoh|leica|mino
 MUS = r"boss|roland|mxr|maxon|ibanez|korg|yamaha|electro-harmonix|ehx|tc electronic|zoom|line 6|digitech|jim dunlop|dunlop|strymon|walrus|xotic|fulltone|keeley|one control|free the tone|vemuram|providence|akai|behringer|teenage engineering|audio-technica"
 STORES = [
     {"name": "イシバシ楽器", "host": "store.ishibashi.co.jp", "search": "https://store.ishibashi.co.jp/search?q={q}&limit=72&sort=Score", "link": r"https://store\.ishibashi\.co\.jp/view/item/\d+", "makers": MUS},
-    {"name": "カメラの八百富", "host": "www.yaotomi.co.jp", "search": "https://www.yaotomi.co.jp/search?q={q}&type=product", "link": r"/products/[A-Za-z0-9\-]+", "makers": CAM},
+    # カメラの八百富は外す（11/18 オーナー承認）：規約 第16条で、写真・文章の無断の複製・転載を禁止しているため
     # フジヤカメラは GitHub からの読み込みを受け付けない（202・中身なし）ので外す（11/18 下調べ）
     {"name": "トレファク", "host": "ec.treasure-f.com", "search": "https://ec.treasure-f.com/search?word={q}", "link": r"/item/\d+", "makers": CAM + "|" + MUS + r"|seiko|citizen|shimano|daiwa"},
 ]
