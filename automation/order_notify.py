@@ -29,6 +29,44 @@ def orders_since(eb, since_utc):
         off += 200
 
 
+def take_answers(led):
+    """人の答え（data/答え/*.json・Claude Code が書く。設計書 5章）を取り込む：
+    {"種類": "仕入れた", "SKU": …, "仕入値": 円(任意), "仕入先": 名前(任意)} → 古物台帳（data/古物台帳/年月.csv）に1行
+    {"種類": "発送した", "SKU": …, "台帳の状態": "出品中"|"終了"} → 台帳の状態を直す
+    取り込んだファイルは data/答え/取り込み済み/ へ。注文番号は SKU から（記録の中だけで）引く"""
+    import csv, glob, shutil
+    d = os.path.join(ROOT, "data", "答え")
+    rows, notes = [], []
+    for f in sorted(glob.glob(os.path.join(d, "*.json"))):
+        a = load_json(f, {})
+        sku = str(a.get("SKU", ""))
+        r = led.get(sku)
+        kind = a.get("種類", "")
+        if kind == "仕入れた" and r:
+            ym = now().strftime("%Y%m")
+            fp = os.path.join(ROOT, "data", "古物台帳", ym + ".csv")
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            new = not os.path.exists(fp)
+            with open(fp, "a", encoding="utf-8", newline="") as fh:
+                w = csv.writer(fh)
+                if new:
+                    w.writerow(["取引の日", "区分", "品目", "数量", "代価(円)", "相手方（仕入先）", "仕入先URL", "SKU"])
+                w.writerow([jst()[:10], "仕入れ", (r.get("タイトル") or "")[:80], 1, a.get("仕入値") or r.get("仕入値(円)", ""),
+                            a.get("仕入先") or "", r.get("仕入元URL", ""), sku])
+            notes.append("古物台帳に記帳 %s" % sku)
+        elif kind == "発送した" and r and a.get("台帳の状態") in ("出品中", "終了"):
+            rows.append({"SKU": sku, "状態": a["台帳の状態"]})
+            notes.append("%s を %s に" % (sku, a["台帳の状態"]))
+        else:
+            notes.append("取り込めない答え：%s" % os.path.basename(f))
+            continue
+        os.makedirs(os.path.join(d, "取り込み済み"), exist_ok=True)
+        shutil.move(f, os.path.join(d, "取り込み済み", os.path.basename(f)))
+    if rows:
+        save_ledger(rows, ["状態"], NAME)
+    return notes
+
+
 def main():
     tt = timetable(NAME)
     eb = Ebay()
@@ -53,6 +91,10 @@ def main():
         write_run(NAME, False, 0, 1)
         return 1
     led = {r["SKU"]: r for r in read_ledger()}
+    ans = take_answers(led)
+    if ans:
+        notify("【答えを取り込んだ】" + "・".join(ans[:20]))
+        led = {r["SKU"]: r for r in read_ledger()}
     new, before_unshipped, rows = [], [], []
     for o in orders:
         if o.get("orderPaymentStatus") != "PAID" or (o.get("cancelStatus") or {}).get("cancelState") == "CANCELED":
