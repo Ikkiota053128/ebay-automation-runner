@@ -12,7 +12,17 @@ NAME = "重複の出品を終える"
 def key(title):
     md = model_of(title)
     k = re.sub(r"[^A-Z0-9]", "", (md or "").upper())
-    return k if len(k) >= 4 and re.search(r"\d", k) and re.search(r"[A-Z]", k) else None
+    if not (len(k) >= 4 and re.search(r"\d", k) and re.search(r"[A-Z]", k)):
+        return None
+    t = str(title)
+    mt = re.search(r"\bfor\s+(canon|nikon|sony|pentax|minolta|olympus|fuji(?:film)?|sigma|leica|contax|m4/3|micro four thirds)", t, re.I)
+    if mt:   # レンズのマウント違い（Canon 用と Nikon 用）は別の品
+        k += ":" + mt.group(1).lower()
+    if re.search(r"finder|hood|grip|battery|charger|strap|case|manual|guide|book|adapter", t, re.I):   # 付属品・本は本体と別にする
+        k += ":acc"
+    if re.search(r"\bnew\b", t, re.I) and not re.search(r"like new", t, re.I):   # 新品と中古は別
+        k += ":new"
+    return k
 
 
 def main():
