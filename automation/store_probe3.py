@@ -1,22 +1,15 @@
-"""トレファクの下調べ（読むだけ）：カテゴリの新着ページの作り（robots・カテゴリのリンク・一覧の商品リンク）を data/店の下調べ/treasure.json に"""
+"""トレファクの下調べ（読むだけ）：カテゴリの名前と番号・新着順の一覧の商品の作り"""
 import os, re, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, save_json, jst
 from stock_watch import fetch
 
-out = {}
-c, rb = fetch("https://ec.treasure-f.com/robots.txt"); out["robots"] = rb[:1500]; time.sleep(3)
-c, top = fetch("https://ec.treasure-f.com/"); time.sleep(3)
-links = sorted(set(re.findall(r'href="(/[^"]*(?:categor|genre|cat|search\?)[^"]*)"', top)))
-out["カテゴリらしいリンク"] = links[:120]
-cams = [l for l in links if re.search(r"camera|カメラ|music|楽器|audio|watch|時計|lens", l, re.I)][:6]
-out["見たページ"] = []
-for l in cams[:4]:
-    c2, h = fetch("https://ec.treasure-f.com" + l); time.sleep(3)
-    out["見たページ"].append({"url": l, "HTTP": c2, "len": len(h), "商品リンク": list(dict.fromkeys(re.findall(r'href="(/item/[^"]+)"', h)))[:6],
-                          "並べ替え": sorted(set(re.findall(r'(?:sort|order)=[^"&]+', h)))[:10], "一部": re.sub(r"\s+", " ", h[h.find("/item/") - 1500: h.find("/item/") + 1500]) if "/item/" in h else ""})
-c3, s = fetch("https://ec.treasure-f.com/search?word=Nikon"); time.sleep(3)
-out["検索の並べ替え"] = sorted(set(re.findall(r'(?:sort|order|category)[=_][^"&\s]+', s)))[:30]
-out["検索のリンク例"] = sorted(set(re.findall(r'href="(/search\?[^"]+)"', s)))[:40]
-save_json(os.path.join(ROOT, "data", "店の下調べ", "treasure.json"), {"時刻": jst(), **out})
-print("done", len(links), len(cams))
+c, h = fetch("https://ec.treasure-f.com/category/"); time.sleep(3)
+cats = []
+for m in re.finditer(r'href="(/search\?category=[^"]+)"[^>]*>([\s\S]{0,200}?)</a>', h):
+    cats.append([m.group(1).replace("&amp;", "&"), re.sub(r"<[^>]+>|\s+", " ", m.group(2)).strip()[:40]])
+c2, l = fetch("https://ec.treasure-f.com/search?category=1011&order=newarrival&number=90&step=1"); time.sleep(3)
+i = l.find("/item/")
+save_json(os.path.join(ROOT, "data", "店の下調べ", "treasure2.json"), {"時刻": jst(), "カテゴリ": cats[:300], "一覧HTTP": c2, "一覧の商品数": len(set(re.findall(r'/item/[^"?#]+', l))),
+          "一覧の一部": re.sub(r"\s+", " ", l[max(0, i - 2500): i + 3000])})
+print("done", len(cats))
