@@ -6,7 +6,7 @@
 #  扱うのは Inventory API へ移し終えた品（台帳に offerId がある品）・仕入元の種類 A と C だけ（B は確認リスト）。
 import json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (hand_links, ROOT, Ebay, EbayError, err_text, num, now, jst, settings, timetable, notify, notify_once_a_day, read_ledger, save_ledger,
+from common import (hand_links, hand_only, ROOT, Ebay, EbayError, err_text, num, now, jst, settings, timetable, notify, notify_once_a_day, read_ledger, save_ledger,
                     is_target, write_run, mark_started, usual_ok, usual_add, load_json, save_json)
 
 NAME = "在庫の監視"
@@ -107,10 +107,10 @@ def main():
     today = jst()[:10]
     # A・C は毎回。B（個人のフリマ・オークション）は1品1日1回だけ（2026-11-18 オーナー承認：プログラムが見る）
     rows = [r for r in ledger if is_target(r) and r.get("状態") in ("出品中", "在庫ゼロ", "売れた")
-            and (kind_of(r.get("仕入元URL"), cfg) in ("A", "C")
+            and not hand_only(r.get("仕入元URL")) and (kind_of(r.get("仕入元URL"), cfg) in ("A", "C")
                  or (kind_of(r.get("仕入元URL"), cfg) == "B" and "mercari" not in str(r.get("仕入元URL"))   # メルカリは機械で見ない（オーナーの決めごと）
                      and not str(r.get("最後に仕入元を確認した日時", "")).startswith(today)))]
-    rows.sort(key=lambda r: r.get("最後に仕入元を確認した日時", ""))   # 長く見ていない品から
+    rows.sort(key=lambda r: r.get("最後に仕入元を確認した日時", ""))   # 長く見ていない品から（メルカリ・Amazon は人が見る）
     # メルカリなど機械で見ない仕入元は、人が見た答え（data/答え/ の {"種類": "仕入元を見た", "SKU": …, "結果": "ある"|"ない"}）を使う（教科書 第18章）
     import glob, shutil
     human, hfiles = {}, []

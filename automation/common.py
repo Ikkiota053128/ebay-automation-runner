@@ -1,6 +1,6 @@
 # 共通部品（在庫の監視・値段の調整・今の出品の移行で使う）
 # 決めごとは CLAUDE.md、窓口の形は docs_APIの最小契約表.md のとおり。秘密の情報は環境変数（GitHub Secrets）からだけ読む。
-import base64, csv, datetime as dt, json, os, shutil, time, urllib.error, urllib.parse, urllib.request
+import re, base64, csv, datetime as dt, json, os, shutil, time, urllib.error, urllib.parse, urllib.request
 from zoneinfo import ZoneInfo
 
 ROOT = os.environ.get("LEDGER_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -430,3 +430,11 @@ def hand_links(title):
     if not q:
         return ""
     return "手で探す：メルカリ https://jp.mercari.com/search?keyword=%s&status=on_sale ／ Amazon https://www.amazon.co.jp/s?k=%s" % (q, q)
+
+
+HAND_ONLY = re.compile(r"mercari|amazon\.co\.jp|amzn\.", re.I)
+
+
+def hand_only(url):
+    """機械で見ない仕入元（メルカリ・Amazon）。候補集めと在庫の見回りは人（教科書 第18章）"""
+    return bool(HAND_ONLY.search(str(url or "")))

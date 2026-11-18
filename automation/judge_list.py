@@ -11,7 +11,7 @@
 """
 import collections, json, os, re, statistics, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
+from common import (hand_only, ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
                     mark_started, load_json, save_json, browse_stopped, browse_stop, listing_limit_stopped, listing_limit_stop,
                     is_limit_error)
 from price_adjust import model_of
@@ -115,7 +115,7 @@ def more_photos(c):
     if len(ph) >= 3:
         return ph
     if "store.shopping.yahoo.co.jp" not in c.get("url", ""):   # ほかの店・フリマ・ヤフオク：商品ページの JSON-LD とヤフオクの画像から集める（メルカリは見ない）
-        if "mercari" in c.get("url", "") or "item.rakuten.co.jp" in c.get("url", ""):
+        if hand_only(c.get("url")) or "item.rakuten.co.jp" in c.get("url", ""):
             return ph
         try:
             from stock_watch import fetch
@@ -220,7 +220,7 @@ def next_sku(c, n):
     d = load_json(p, {"n": 0})
     d["n"] = int(d["n"]) + 1
     save_json(p, d)
-    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR"}.get(c["src"], "ST")
+    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR", "Amazon（人）": "AZ"}.get(c["src"], "ST")
     return "G%s-%06d" % (code, d["n"])
 
 
@@ -415,7 +415,7 @@ def main():
                                             n_list = 0
         r["t"] = now().timestamp()
         res.append(r)
-        if c.get("src") == "メルカリ（人）" and r["結論"] == "GASへ":
+        if str(c.get("id", "")).startswith("人:") and r["結論"] == "GASへ":
             r["結論"] = "人に返す"
         if live and r["結論"] in ("GO", "見送り", "人に返す") and (r["結論"] != "GO" or r.get("出品")):   # 影の運転の間は記録しない（GAS に今までどおり送る）
             done[c["id"]] = {"t": r["t"], "結論": r["結論"]}
@@ -423,7 +423,7 @@ def main():
     if rows:
         save_ledger(rows, list(rows[0].keys()), NAME)
     # 店のサイトの地引網の品で「GASへ」になったものは、ここから GAS に送る（店の地引網の品は、店の地引網が送る）
-    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!", "メルカリ（人）") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
+    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!") and not str(c.get("id", "")).startswith("人:") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
     if live and to_gas:
         try:
             from flea_sweep import gas_post
@@ -456,7 +456,7 @@ def main():
         msg.append("理由：" + "・".join("%s %d" % (k[:30], v) for k, v in why.most_common(5)))
     hum = [x for x in res if str(x.get("id", "")).startswith("人:")]
     if hum:
-        msg.append("メルカリ（あなたが送った品）：" + " / ".join("%s %s%s" % (x["型番"], x["結論"], "（%s）" % x.get("理由", "")[:40] if x.get("理由") else "") for x in hum[:10]))
+        msg.append("メルカリ・Amazon（あなたが送った品）：" + " / ".join("%s %s%s" % (x["型番"], x["結論"], "（%s）" % x.get("理由", "")[:40] if x.get("理由") else "") for x in hum[:10]))
     if listed:
         msg.append("出品した %d品：" % len(listed) + "・".join("%s $%.2f" % (t[:40], p) for _, _, t, p in listed[:10]))
         if not tt.get("カナリア済み"):
