@@ -137,7 +137,9 @@ def main():
     mark_started(NAME)
     eb = Ebay()
     if not eb.ready() or not all(gas_url()):
-        notify_once_a_day("鍵なし_一括の出品", "【一括の出品】eBay の鍵か GAS の受け取り口（GAS_WEBAPP_URL・GAS_SEND_TOKEN）が無いので、何もしていません")
+        miss = [k for k in ("EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET", "EBAY_REFRESH_TOKEN", "GAS_WEBAPP_URL", "GAS_SEND_TOKEN") if not os.environ.get(k, "").strip()]
+        print("Secrets が空：" + "・".join(miss))
+        notify_once_a_day("鍵なし_一括の出品", "【一括の出品】GitHub の Secrets が空なので、何もしていません：" + "・".join(miss))
         write_run(NAME, False, 0, 1)
         return 0
     queue = gas_queue()
