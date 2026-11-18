@@ -7,7 +7,7 @@
 """
 import datetime as dt, glob, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import ROOT, PT, JST, now, jst, notify, load_json, write_run, mark_started, read_ledger, settings, num, listing_limit_stopped
+from common import ROOT, PT, JST, now, jst, notify, load_json, write_run, mark_started, read_ledger, settings, num, listing_limit_stopped, Ebay
 
 NAME = "朝の報告"
 
@@ -45,6 +45,34 @@ def main():
     n_sold_wait = sum(1 for r in led if r.get("状態") == "売れた")
     if n_sold_wait:
         lines.append("「売れた」のまま（発送後に 出品中に戻す／終了 を教えてください）：%d品" % n_sold_wait)
+    # 2b) 昨日の売上・利益（台帳の仕入値・送料・手数料から。買い手の情報は使わない）
+    try:
+        by = {r["SKU"]: r for r in led}
+        sales = profit = 0.0
+        for d in sold:
+            r = by.get(d.get("SKU") or "")
+            usd = num(d.get("売値")) or 0
+            sales += usd
+            if r:
+                fx = num(r.get("為替")) or 152
+                k = (num(r.get("手数料率")) or 0.1742) + (num(r.get("関税率")) or 0.15)
+                profit += usd * fx * (1 - k) - (num(r.get("仕入値(円)")) or 0) - (num(r.get("国内送料(円)")) or 0) - (num(r.get("出品時の海外送料(円)")) or 0) - (num(r.get("固定費(円)")) or 0)
+        if sold:
+            lines.append("昨日の売上 $%.2f・見込みの利益 %s円（台帳の値で計算）" % (sales, format(round(profit), ",")))
+    except Exception:
+        pass
+    # 2c) eBay のメッセージ（件数だけ。中身・買い手の名前は読まない）
+    try:
+        eb = Ebay()
+        if eb.ready():
+            x = eb.trading("GetMyMessages", "<DetailLevel>ReturnSummary</DetailLevel>")
+            import re as _re
+            nu = _re.search(r"<NewMessageCount>(\d+)</NewMessageCount>", x)
+            fl = _re.search(r"<FlaggedMessageCount>(\d+)</FlaggedMessageCount>", x)
+            if nu:
+                lines.append("eBayの未読メッセージ：%s件%s（返事はあなたが Seller Hub で）" % (nu.group(1), "・旗つき %s件" % fl.group(1) if fl else ""))
+    except Exception as e:
+        lines.append("（メッセージの件数を読めなかった：%s）" % type(e).__name__)
     # 3) 止まっているプログラム
     tt = load_json(os.path.join(ROOT, "時刻表.json"), {}).get("プログラム", {})
     stop = []

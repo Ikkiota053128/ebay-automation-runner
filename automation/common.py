@@ -145,6 +145,14 @@ class Ebay:
                     continue
                 raise EbayError(e.code, j)
 
+    def trading(self, call, xml_body):
+        """Trading API（XML）。読むだけの呼び出しにだけ使う（GetMyMessages の件数など）"""
+        body = ('<?xml version="1.0" encoding="utf-8"?><%sRequest xmlns="urn:ebay:apis:eBLBaseComponents">%s</%sRequest>' % (call, xml_body, call)).encode()
+        h = {"X-EBAY-API-IAF-TOKEN": self._token("user"), "X-EBAY-API-CALL-NAME": call, "X-EBAY-API-SITEID": "0",
+             "X-EBAY-API-COMPATIBILITY-LEVEL": "1193", "Content-Type": "text/xml"}
+        r = self.open(urllib.request.Request(API + "/ws/api.dll", data=body, method="POST", headers=h), timeout=60)
+        return r.read().decode("utf-8", "replace")
+
     # Inventory（契約表 4・5・6・16章）
     def offers_of(self, sku):
         try:

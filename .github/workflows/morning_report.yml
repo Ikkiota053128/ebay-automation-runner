@@ -29,6 +29,9 @@ jobs:
         env:
           LEDGER_ROOT: ${{ github.workspace }}/data_repo
           NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
         run: |
           mkdir -p data_repo/data/ログ
           rc=0
