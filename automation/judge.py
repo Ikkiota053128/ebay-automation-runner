@@ -87,6 +87,8 @@ def ship_fedex(w, box, tbl):
 
 def cond_of(title_ja):
     t = str(title_ja or "")
+    if re.search(r"新品同様|新品仕上|新品に近い|新品級|未使用に近い|展示品|開封済|中古", t):
+        return 3000
     if USED_JA.search(t):
         return 3000
     if NEW_JA.search(t):
