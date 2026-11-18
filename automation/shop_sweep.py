@@ -135,12 +135,25 @@ def main():
                     why[r] = why.get(r, 0) + 1
                     continue
                 stat[src]["残った"] += 1
-                it.update({"型番": m["model"], "メーカー": m["maker"], "src": src})
+                it.update({"型番": m["model"], "メーカー": m["maker"], "src": src, "cap": m["cap"]})
                 cands.append(it)
         done += 1
     cur["i"] = (start + done) % max(len(models), 1)
     save_json(cur_p, cur)
     save_json(seen_p, seen)
+    # 送る順番：仕入値が上限より大きく安い品（もうかる見込みが高い品）から。送りきれない品は「送る待ち」に残して次の回へ（3日で捨てる）
+    for c in cands:
+        c["ratio"] = round(c["price"] / c["cap"], 3) if c.get("cap") else 1.0
+        c["t"] = now().timestamp()
+    back_p = os.path.join(ROOT, "data", "店の地引網", "送る待ち.json")
+    back = {c["id"]: c for c in load_json(back_p, []) if c.get("t", 0) >= now().timestamp() - 3 * 86400}
+    for c in cands:
+        back.setdefault(c["id"], c)
+    queue = sorted(back.values(), key=lambda c: c["ratio"])[: int(tt.get("送る待ちの上限_件", 1500))]
+    n_send = int(tt.get("1回に送る上限_件", 30))
+    if live and not tt.get("カナリア済み"):
+        n_send = min(n_send, int(tt.get("カナリアの件数", 20)))
+    cands = queue[:n_send] if live else cands
     sent = 0
     if live and cands:
         for src, host, site in (("楽天", "item.rakuten.co.jp", "楽天市場（GitHubの地引網）"), ("Yahoo!", "store.shopping.yahoo.co.jp", "Yahoo!ショッピング（GitHubの地引網）")):
@@ -153,7 +166,9 @@ def main():
                     raise SystemExit("GASが受け取りを断った")
                 sent += len(part[i:i + 15])
                 time.sleep(3)
-    rec = {"時刻": jst(), "本番": live, "見た型番": done, "型番の数": len(models), "数": stat, "外した理由": why,
+    sent_ids = {c["id"] for c in cands} if live else set()
+    save_json(back_p, [c for c in queue if c["id"] not in sent_ids])
+    rec = {"時刻": jst(), "本番": live, "送る待ち": len(queue) - len(sent_ids), "見た型番": done, "型番の数": len(models), "数": stat, "外した理由": why,
            "候補": [{k: c[k] for k in ("src", "型番", "price", "title", "url")} for c in cands], "送った": sent}
     save_json(os.path.join(ROOT, "data", "店の地引網", now().strftime("%Y%m%d_%H%M") + ".json"), rec)
     msg = ["【店の地引網】%s %s：型番 %d／%d個を見た" % (jst(), "本番" if live else "ドライラン", done, len(models))]
@@ -161,7 +176,7 @@ def main():
         msg.append("%s：API %d回・新しく見た品 %d・候補 %d" % (s, v["API"], v["見た"], v["残った"]))
     if why:
         msg.append("外した理由：" + "・".join("%s %d" % kv for kv in sorted(why.items(), key=lambda x: -x[1])[:6]))
-    msg.append(("GASへ送った %d品" % sent) if live else ("候補 %d品（ドライランなのでGASには送っていない）" % len(cands)))
+    msg.append(("GASへ送った %d品（仕入値が上限より安い順）・送る待ち %d品" % (sent, len(queue) - len(sent_ids))) if live else ("候補 %d品（ドライランなのでGASには送っていない）" % len(cands)))
     write_run(NAME, True, len(cands), len(stop))
     print("\n".join(msg))
     if live or now().hour in (9, 13, 18, 22) or os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":   # ドライランの知らせは1日4回だけ
