@@ -19,7 +19,7 @@ MUS = r"boss|roland|mxr|maxon|ibanez|korg|yamaha|electro-harmonix|ehx|tc electro
 STORES = [
     {"name": "イシバシ楽器", "host": "store.ishibashi.co.jp", "search": "https://store.ishibashi.co.jp/search?q={q}&limit=72&sort=Score", "link": r"https://store\.ishibashi\.co\.jp/view/item/\d+", "makers": MUS},
     {"name": "カメラの八百富", "host": "www.yaotomi.co.jp", "search": "https://www.yaotomi.co.jp/search?q={q}&type=product", "link": r"/products/[A-Za-z0-9\-]+", "makers": CAM},
-    {"name": "フジヤカメラ", "host": "www.fujiya-camera.co.jp", "search": "https://www.fujiya-camera.co.jp/shop/goods/search.aspx?keyword={q}", "link": r"/shop/g/g[0-9A-Za-z\-]+/?", "makers": CAM},
+    # フジヤカメラは GitHub からの読み込みを受け付けない（202・中身なし）ので外す（11/18 下調べ）
     {"name": "トレファク", "host": "ec.treasure-f.com", "search": "https://ec.treasure-f.com/search?word={q}", "link": r"/item/\d+", "makers": CAM + "|" + MUS + r"|seiko|citizen|shimano|daiwa"},
 ]
 
@@ -74,7 +74,7 @@ def main():
             if time.time() > t_end:
                 break
             cur[s["name"]] = cur.get(s["name"], 0) + 1
-            q = urllib.parse.quote((m["maker"] + " " + m["model"]).strip() if s["name"] != "イシバシ楽器" else m["model"])
+            q = urllib.parse.quote((m["maker"] + " " + m["model"]).strip() if s["name"] == "トレファク" else m["model"])
             code, html = fetch(s["search"].format(q=q))
             st["検索"] += 1
             time.sleep(gap)
@@ -87,7 +87,7 @@ def main():
             links = []
             for mm in re.finditer(s["link"], html):
                 u = mm.group(0)
-                near = re.sub(r"<[^>]+>", " ", html[max(0, mm.start() - 600): mm.end() + 900])
+                near = re.sub(r"<[^>]+>", " ", html[max(0, mm.start() - 800): mm.end() + 3000])
                 if m["rx"].search(near.upper().replace("‐", "-")) and u not in links:
                     links.append(u)
             for u in links[:4]:
