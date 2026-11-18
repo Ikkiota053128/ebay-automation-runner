@@ -24,8 +24,8 @@ def fetch(u):
         return None, str(e)[:100]
 
 NAME = "モールの店の規約"
-RESALE = re.compile(r"(転売|再販|営利|せどり|業者)[^。]{0,60}(できません|できない|禁止|お断り|不可|取り消|取消|キャンセル|ご遠慮|控え|停止)|"
-                    r"(お断り|キャンセル|取り消|取消)[^。]{0,40}(転売|再販|営利目的)")
+RESALE = re.compile(r"(転売|再販目的|再販売目的|営利目的|せどり|輸出業者|同業者)[^。]{0,60}(できません|できない|禁止|お断り|不可|取り消|取消|キャンセル|ご遠慮|控え|停止)|"
+                    r"(お断り|キャンセル|取り消|取消)[^。]{0,40}(転売|再販目的|再販売目的|営利目的|輸出業者|同業者)")
 COPY = re.compile(r"(転載|二次利用|二次使用|無断使用|無断転用|無断利用|複製)[^。]{0,40}(禁止|お断り|できません|固く)")
 WARRANTY_ONLY = re.compile(r"(初期不良|保証|返品|交換)[^。]{0,40}(転売|再販)|(転売|再販)[^。]{0,40}(初期不良|保証|返品|交換)")
 
@@ -60,7 +60,8 @@ def main():
     res_p = os.path.join(ROOT, "data", "店の下調べ", "モールの店の規約.json")
     res = load_json(res_p, {})
     limit = int(os.environ.get("MALL_TERMS_MAX", "250"))
-    todo = [k for k, _ in cnt.most_common() if not res.get(k, {}).get("読んだ日時", "").startswith(jst()[:7])][:limit]
+    ver = "v2"   # 11/18 22:15：「配送業者」などを転売の文と取り違えていた → 読み直す
+    todo = [k for k, _ in cnt.most_common() if not (res.get(k, {}).get("読んだ日時", "").startswith(jst()[:7]) and res.get(k, {}).get("版") == ver)][:limit]
     t_end = time.time() + 60 * float(os.environ.get("MALL_TERMS_MIN", "45"))
     done = []
     for i, k in enumerate(todo):
@@ -83,7 +84,7 @@ def main():
         st = "読めない" if not any(c == 200 for c in codes) else ("使わない" if hit_r or hit_c else "OK")
         if i % 10 == 9:
             save_json(res_p, res)
-        res[k] = {"結果": st, "転売の文": hit_r[:3], "転載の文": hit_c[:3], "保証だけの文": warranty[:2], "HTTP": codes, "読んだ日時": jst(), "重み": cnt[k]}
+        res[k] = {"結果": st, "転売の文": hit_r[:3], "転載の文": hit_c[:3], "保証だけの文": warranty[:2], "HTTP": codes, "読んだ日時": jst(), "重み": cnt[k], "版": ver}
     save_json(res_p, res)
     bad = sorted(k for k, v in res.items() if v["結果"] == "使わない")
     save_json(os.path.join(ROOT, "data", "判定", "使わない店.json"), {"更新": jst(), "店": bad,
