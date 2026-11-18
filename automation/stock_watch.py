@@ -6,7 +6,7 @@
 #  扱うのは Inventory API へ移し終えた品（台帳に offerId がある品）・仕入元の種類 A と C だけ（B は確認リスト）。
 import json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (ROOT, Ebay, EbayError, err_text, num, now, jst, settings, timetable, notify, notify_once_a_day, read_ledger, save_ledger,
+from common import (hand_links, ROOT, Ebay, EbayError, err_text, num, now, jst, settings, timetable, notify, notify_once_a_day, read_ledger, save_ledger,
                     is_target, write_run, mark_started, usual_ok, usual_add, load_json, save_json)
 
 NAME = "在庫の監視"
@@ -138,7 +138,7 @@ def main():
             if code in (404, 410):
                 gone404.append(r["SKU"])
             if r["状態"] == "売れた" and not ok:
-                accident.append("%s（%s）" % (r["SKU"], why))
+                accident.append("%s（%s）\n  %s" % (r["SKU"], why, hand_links(r.get("タイトル"))))
             elif r["状態"] == "出品中" and not ok:
                 zero.append(r)
             elif r["状態"] == "在庫ゼロ" and ok:

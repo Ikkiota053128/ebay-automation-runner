@@ -9,7 +9,7 @@
 """
 import datetime as dt, hashlib, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (ROOT, Ebay, EbayError, err_text, now, jst, timetable, notify, notify_once_a_day, read_ledger, save_ledger,
+from common import (ROOT, Ebay, EbayError, err_text, now, jst, timetable, notify, notify_once_a_day, read_ledger, save_ledger, hand_links,
                     write_run, mark_started, load_json, save_json, num)
 
 NAME = "受注の通知"
@@ -124,9 +124,9 @@ def main():
     msgs = []
     for it in new:
         r = led.get(it["SKU"]) or {}
-        msgs.append("【売れた】%s %s\n%s\n売値 $%s・仕入値 %s円\n仕入元：%s\n→ すぐ仕入れて、仕入れたら「%s 仕入れた」と Claude に" % (
+        msgs.append("【売れた】%s %s\n%s\n売値 $%s・仕入値 %s円\n仕入元：%s\n%s\n→ すぐ仕入れて、仕入れたら「%s 仕入れた」と Claude に" % (
             jst(), it["SKU"] or "(SKUなし・GASの出品)", (r.get("タイトル") or "")[:80], it["売値"], r.get("仕入値(円)", "?"),
-            r.get("仕入元URL") or "（台帳に無い：GASのシートの出品一覧を見てください）", it["SKU"] or "出品ID " + str(it["出品ID"])))
+            r.get("仕入元URL") or "（台帳に無い：GASのシートの出品一覧を見てください）", hand_links(r.get("タイトル")), it["SKU"] or "出品ID " + str(it["出品ID"])))
     if first and before_unshipped and not st.get("前からの未発送を知らせた"):
         msgs.append("【受注の通知を始めました】始める前から「支払い済み・まだ発送していない」注文 %d件（SKU）：%s\n台帳を「売れた」にするか教えてください" % (
             len(before_unshipped), "・".join(x["SKU"] or "出品ID " + str(x["出品ID"]) for x in before_unshipped[:30])))

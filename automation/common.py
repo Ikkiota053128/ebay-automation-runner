@@ -397,3 +397,14 @@ def usual_add(name, n_changes, scheduled):
     hist = [h for h in load_json(p, []) if h.get("t", "") >= (now() - dt.timedelta(days=8)).isoformat()]
     hist.append({"t": now().isoformat(), "n": n_changes})
     save_json(p, hist)
+
+
+def hand_links(title):
+    """人が手で探すためのリンク（メルカリ・Amazon）。プログラムはこのページを開かない（メルカリは機械で見ない決めごと・Amazon は規約）。"""
+    import urllib.parse as _u, re as _r
+    words = [w for w in _r.sub(r"[^\w\-/ ]", " ", str(title or "")).split()
+             if not _r.match(r"(?i)^(used|new|japan|from|excellent|mint|near|tested|w/|with|the|and|for|exc\+*\d*)$", w)][:5]
+    q = _u.quote(" ".join(words))
+    if not q:
+        return ""
+    return "手で探す：メルカリ https://jp.mercari.com/search?keyword=%s&status=on_sale ／ Amazon https://www.amazon.co.jp/s?k=%s" % (q, q)
