@@ -20,7 +20,7 @@ STORES = [
     {"name": "イシバシ楽器", "host": "store.ishibashi.co.jp", "search": "https://store.ishibashi.co.jp/search?q={q}&limit=72&sort=Score", "link": r"https://store\.ishibashi\.co\.jp/view/item/\d+", "makers": MUS},
     # カメラの八百富は外す（11/18 オーナー承認）：規約 第16条で、写真・文章の無断の複製・転載を禁止しているため
     # フジヤカメラは GitHub からの読み込みを受け付けない（202・中身なし）ので外す（11/18 下調べ）
-    {"name": "トレファク", "host": "ec.treasure-f.com", "search": "https://ec.treasure-f.com/search?word={q}", "link": r"/item/\d+", "makers": CAM + "|" + MUS + r"|seiko|citizen|shimano|daiwa"},
+    # トレファクは型番の検索ではなく、分類ごとの新着を見る（11/18 21:46 オーナー「ここの仕入れ先もこうやって」）→ treasure_cates
 ]
 
 
@@ -61,6 +61,48 @@ def hardoff_cates(models, seen, stat, why, gap):
                 why[r] = why.get(r, 0) + 1
                 continue
             it.update({"型番": m["model"], "メーカー": m["maker"], "src": "ハードオフ", "cap": m["cap"]})
+            out.append(it)
+            st["候補"] += 1
+    return out
+
+
+TF_CATES = [("エフェクター・アンプ", "category=1011&category2=1124"), ("リール", "category=1046&category2=1052&category3=1219"),
+            ("モニタースピーカー・ヘッドホン", "category=1011&category2=1099&category3=1398"), ("オーディオインターフェース", "category=1011&category2=1099&category3=1396")]
+
+
+def treasure_cates(models, seen, stat, why, gap):
+    """トレファク：分類ごとの新着（新着順・1ページ90品）を見る（ハードオフのカテゴリの新着と同じ考え方）"""
+    out = []
+    st = stat.setdefault("トレファク", {"検索": 0, "商品ページ": 0, "候補": 0, "読めない": 0})
+    from flea_sweep import match
+    for nm, q in TF_CATES:
+        code, html = fetch("https://ec.treasure-f.com/search?%s&order=newarrival&number=90&step=1" % q)
+        st["検索"] += 1
+        time.sleep(gap)
+        if code != 200:
+            st["読めない"] += 1
+            continue
+        for part in html.split('<li class="pj-search_item">')[1:]:
+            m_id = re.search(r'href="/item/(\d+)"', part)
+            if not m_id:
+                continue
+            title = " ".join(re.sub(r"<[^>]+>|\s+", " ", t).strip() for t in re.findall(r'<p class="cm-typo_body_a cm-itemlist_text">([\s\S]*?)</p>', part))
+            price = int((re.search(r"cm-itemlist_price[^>]*>\s*[￥¥]\s*([\d,]+)", part) or [None, "0"])[1].replace(",", "") or 0)
+            url = "https://ec.treasure-f.com/item/%s" % m_id.group(1)
+            key = "トレファク:" + url
+            if key in seen or re.search(r"SOLD|売り切れ", part, re.I):
+                continue
+            seen[key] = now().timestamp()
+            m = match(title, models)
+            if not m:
+                continue
+            img = re.findall(r'<img src="(/images/[^"]+)"', part)
+            it = {"id": key, "title": title, "price": price, "url": url, "photos": ["https://ec.treasure-f.com" + u for u in img][:1]}
+            r = keep(it, m)
+            if r:
+                why[r] = why.get(r, 0) + 1
+                continue
+            it.update({"型番": m["model"], "メーカー": m["maker"], "src": "トレファク", "cap": m["cap"]})
             out.append(it)
             st["候補"] += 1
     return out
@@ -156,6 +198,10 @@ def main():
                 it.update({"型番": m["model"], "メーカー": m["maker"], "src": s["name"], "cap": m["cap"]})
                 cands.append(it)
                 st["候補"] += 1
+    try:
+        cands += treasure_cates(models, seen, stat, why, gap)
+    except Exception as e:
+        why["トレファクを読めなかった：%s" % type(e).__name__] = 1
     try:
         cands += hardoff_cates(models, seen, stat, why, gap)
     except Exception as e:
