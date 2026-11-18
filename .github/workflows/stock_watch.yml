@@ -51,5 +51,5 @@ jobs:
           git add data/ 台帳.csv 2>/dev/null || git add data/
           git diff --cached --quiet && exit 0
           git commit -q -m "在庫の監視：記録 $(TZ=Asia/Tokyo date '+%m/%d %H:%M') JST"
-          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
+          for i in 1 2 3; do (git pull -q --rebase || { git rebase --abort; git fetch -q && git rebase -q -X theirs origin/main; }) && git push -q && exit 0; sleep 5; done
           echo "保存に失敗"; exit 1

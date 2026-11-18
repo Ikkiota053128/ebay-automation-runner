@@ -78,11 +78,13 @@ def write_run(name, ok, count, errors, extra=None):
 
 
 def mark_started(name):
-    p = os.path.join(ROOT, "data", "始めた日時.json")
-    d = load_json(p, {})
-    if name not in d:
-        d[name] = jst()
-        save_json(p, d)
+    """ドライランを最初に動かした時刻（9章）。プログラムごとに別のファイル（同時に動くプログラムどうしで保存がぶつからないように）"""
+    old = load_json(os.path.join(ROOT, "data", "始めた日時.json"), {})
+    if name in old:
+        return
+    p = os.path.join(ROOT, "data", "始めた日時", name + ".json")
+    if not os.path.exists(p):
+        save_json(p, {"始めた日時": jst()})
 
 
 # ---------------------------------------------------------------- eBay（契約表 0・1・15章）
