@@ -1,0 +1,29 @@
+"""売れていない出品の一覧（読むだけ・手で動かす）：eBay の出品中（GetMyeBaySelling ActiveList）の 出品の始まり・ウォッチ数・値段を読み、
+出してからの日数が長い順に data/上限/売れていない出品.json に書く。終えるのはオーナーの承認のあと（このプログラムは何も変えない）"""
+import datetime as dt, os, re, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import ROOT, Ebay, save_json, jst, now, read_ledger
+
+eb = Ebay()
+items, page = [], 1
+while True:
+    x = eb.trading("GetMyeBaySelling", "<ActiveList><Include>true</Include><Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>%d</PageNumber></Pagination></ActiveList><DetailLevel>ReturnAll</DetailLevel>" % page)
+    for b in re.findall(r"<Item>([\s\S]*?)</Item>", x):
+        g = lambda t: (re.search(r"<%s[^>]*>([^<]*)</%s>" % (t, t), b) or [None, ""])[1]
+        items.append({"出品ID": g("ItemID"), "SKU": g("SKU"), "タイトル": g("Title")[:80], "値段": float(g("CurrentPrice") or 0),
+                      "始まり": g("StartTime")[:10], "ウォッチ": int(g("WatchCount") or 0)})
+    tp = int((re.search(r"<TotalNumberOfPages>(\d+)</TotalNumberOfPages>", x) or [None, "1"])[1])
+    if page >= tp:
+        break
+    page += 1
+today = now().date()
+for it in items:
+    try:
+        it["日数"] = (today - dt.date.fromisoformat(it["始まり"])).days
+    except Exception:
+        it["日数"] = None
+items.sort(key=lambda i: -(i["日数"] or 0))
+b = {"60日以上": [i for i in items if (i["日数"] or 0) >= 60], "30〜59日": [i for i in items if 30 <= (i["日数"] or 0) < 60]}
+save_json(os.path.join(ROOT, "data", "上限", "売れていない出品.json"), {"時刻": jst(), "出品中": len(items), "合計ドル": round(sum(i["値段"] for i in items), 2),
+          "60日以上": b["60日以上"], "30〜59日": b["30〜59日"]})
+print("ok", len(items), {k: (len(v), round(sum(i["値段"] for i in v))) for k, v in b.items()})
