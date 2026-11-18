@@ -79,6 +79,9 @@ def cheapest_comp(eb, row, me, my_ids, cfg):
     md = model_of(row.get("タイトル"))
     if not md:
         return None, "型番が読めない"
+    from model_grow import size_code
+    if size_code((row.get("タイトル") or "").split(" ")[0], md):
+        return None, "リールの大きさの記号（%s）は型番ではないので比べない" % md
     act = judge.comps(eb, md, int(num(row.get("eBayの状態ID")) or 3000), me, my_ids)
     m = market(act)
     if not m:
