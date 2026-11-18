@@ -82,11 +82,53 @@ def ip_bad(title):
     return ""
 
 
+def gas_cands():
+    """GAS が見つけた候補（仕入れ先の検索結果の ✅ 上限以内・v667 page=ghcands）を、型番リストで型番を読んで候補にする"""
+    try:
+        import urllib.parse, urllib.request
+        from flea_sweep import gas_get_models, compile_models, match
+        url, tok = os.environ.get("GAS_WEBAPP_URL", "").strip(), os.environ.get("GAS_SEND_TOKEN", "").strip()
+        if not (url and tok):
+            return []
+        q = url + "?" + urllib.parse.urlencode({"page": "ghcands", "token": tok, "hours": 48})
+        d = json.loads(urllib.request.urlopen(urllib.request.Request(q, headers={"User-Agent": "ebay-automation"}), timeout=120).read().decode("utf-8"))
+        ms = compile_models((gas_get_models() or {"models": []})["models"])
+        out = []
+        for it in d.get("items", []):
+            hit = match(it["title"], ms)
+            if not hit or not it.get("price"):
+                continue
+            m = hit[0] if isinstance(hit, list) else hit
+            out.append({"id": "gas:" + it["url"], "title": it["title"], "price": int(it["price"]), "url": it["url"],
+                        "photos": [u for u in str(it.get("thumb", "")).split("\n") if u.startswith("http")],
+                        "型番": m["model"], "メーカー": m["maker"], "src": re.sub(r"（.*$", "", it.get("site", "GAS")) or "GAS", "cap": int(it.get("cap") or 0)})
+        return out
+    except Exception as e:
+        print("GASの候補を読めなかった：", type(e).__name__)
+        return []
+
+
 def more_photos(c):
     """Yahoo!ショッピングは、APIの写真が1枚だけ。商品ページ（GitHub から読める）から同じ商品の写真（_1, _2 …）を集める。楽天のページは読めない"""
     ph = photos_of(c)
-    if "store.shopping.yahoo.co.jp" not in c.get("url", "") or len(ph) >= 3:
+    if len(ph) >= 3:
         return ph
+    if "store.shopping.yahoo.co.jp" not in c.get("url", ""):   # ほかの店・フリマ・ヤフオク：商品ページの JSON-LD とヤフオクの画像から集める（メルカリは見ない）
+        if "mercari" in c.get("url", "") or "item.rakuten.co.jp" in c.get("url", ""):
+            return ph
+        try:
+            from stock_watch import fetch
+            from store_sweep import ld_product
+            from flea_sweep import IMG_RX
+            code, html = fetch(c["url"])
+            if code == 200:
+                p = ld_product(html) or {}
+                for u in (p.get("photos") or []) + IMG_RX.findall(html):
+                    if u.startswith("https://") and u not in ph:
+                        ph.append(u)
+        except Exception:
+            pass
+        return ph[:12]
     try:
         from stock_watch import fetch
         code, html = fetch(c["url"])
@@ -256,7 +298,7 @@ def main():
     done_p = os.path.join(ROOT, "data", "判定", "判定済み.json")
     done = {k: v for k, v in load_json(done_p, {}).items() if v.get("t", 0) >= now().timestamp() - 14 * 86400}
     back = load_json(os.path.join(ROOT, "data", "店の地引網", "送る待ち.json"), []) + \
-        load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), [])
+        load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), []) + (gas_cands() if tt.get("GASにv667") else [])
     # 同じ型番は一番安い1品。判定済み・出品中の型番は飛ばす
     best = {}
     for c in sorted(back, key=lambda c: c["price"]):
