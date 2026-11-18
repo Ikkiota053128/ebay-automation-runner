@@ -183,7 +183,7 @@ def main():
     done, bad, skip, results, rows = [], [], [], [], []
     for it in queue[:cap]:
         pl = it["payload"]
-        if kind_of((pl.get("ledger") or {}).get("src", ""), cfg) not in ("A", "C"):   # 在庫の監視が見られない仕入元（フリマなど）は出さない
+        if kind_of((pl.get("ledger") or {}).get("src", ""), cfg) not in ("A", "B", "C") or "mercari" in (pl.get("ledger") or {}).get("src", ""):   # 在庫の監視が見られない仕入元（フリマなど）は出さない
             skip.append((pl.get("sku"), "仕入元がA・C以外（GASで出品し直す）"))
             results.append({"sku": pl.get("sku"), "error": "差し戻し：仕入元がフリマ・その他の店なので、GitHubの在庫の監視が見られない。GASで出品し直す"})
             continue

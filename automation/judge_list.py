@@ -247,7 +247,7 @@ def main():
             r.update(結論="見送り", 理由="キャラクター・ゲーム・限定品（決めごとA）")
         elif judge.is_acc_ja(c["title"], c["型番"]):
             r.update(結論="見送り", 理由="付属品・部品（本体ではない）")
-        elif kind_of(c["url"], cfg) not in ("A", "C"):
+        elif kind_of(c["url"], cfg) not in ("A", "B", "C"):
             r.update(結論="GASへ", 理由="在庫の監視が見られない仕入元")
         else:
             cond = judge.cond_of(c["title"])

@@ -11,8 +11,9 @@ from common import (ROOT, Ebay, EbayError, err_text, num, now, jst, settings, ti
 
 NAME = "在庫の監視"
 UA = "Mozilla/5.0 (compatible; ebay-automation stock check)"
-SOLD_TXT = re.compile(r"在庫切れ|売り切れ|SOLD\s?OUT|品切れ|在庫がありません|販売を終了|販売終了|お取り扱いできません|入荷待ち", re.I)
-CART_TXT = re.compile(r"カートに入れる|カートへ入れる|購入手続きへ|買い物かごに入れる")
+SOLD_TXT = re.compile(r"在庫切れ|売り切れ|SOLD\s?OUT|品切れ|在庫がありません|販売を終了|販売終了|お取り扱いできません|入荷待ち|"
+                      r"このオークションは終了しています|オークションは終了|出品者により削除|この商品は削除されました|ページが見つかりません", re.I)
+CART_TXT = re.compile(r"カートに入れる|カートへ入れる|購入手続きへ|買い物かごに入れる|購入する|入札する|今すぐ落札")
 
 
 def kind_of(url, cfg):
@@ -103,8 +104,12 @@ def main():
         write_run(NAME, False, 0, 1)
         return 0   # 鍵が入るまでは毎回赤くしない（知らせは1日1回）
     ledger = read_ledger()
+    today = jst()[:10]
+    # A・C は毎回。B（個人のフリマ・オークション）は1品1日1回だけ（2026-11-18 オーナー承認：プログラムが見る）
     rows = [r for r in ledger if is_target(r) and r.get("状態") in ("出品中", "在庫ゼロ", "売れた")
-            and kind_of(r.get("仕入元URL"), cfg) in ("A", "C")]
+            and (kind_of(r.get("仕入元URL"), cfg) in ("A", "C")
+                 or (kind_of(r.get("仕入元URL"), cfg) == "B" and "mercari" not in str(r.get("仕入元URL"))   # メルカリは機械で見ない（オーナーの決めごと）
+                     and not str(r.get("最後に仕入元を確認した日時", "")).startswith(today)))]
     rows.sort(key=lambda r: r.get("最後に仕入元を確認した日時", ""))   # 長く見ていない品から
     unk = load_json(os.path.join(ROOT, "data", "在庫の監視", "読めない回数.json"), {})
     out = {"ある": [], "ない": [], "読めない": []}
