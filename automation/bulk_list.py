@@ -8,6 +8,27 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import (ROOT, Ebay, EbayError, err_text, num, now, jst, settings, timetable, notify, notify_once_a_day,
                     read_ledger, save_ledger, write_run, mark_started, load_json, save_json)
 from stock_watch import kind_of
+from price_adjust import model_of
+import re
+
+
+def mkey(s):
+    return re.sub(r"[^A-Z0-9]", "", str(s or "").upper())
+
+
+def same_model(a, b):
+    """同じ型番か：一致、または短いほう（5文字以上）が長いほうの頭（DW-6900RCS と DW-6900RCS-7JF は同じ）"""
+    if not a or not b:
+        return False
+    s, l = sorted((a, b), key=len)
+    return len(s) >= 5 and l.startswith(s)
+
+
+def model_in(pl):
+    for k, v in pl.get("aspects") or []:
+        if k == "Model" and v and v != "Does not apply":
+            return mkey(v)
+    return mkey(model_of(pl.get("title")))
 
 NAME = "一括の出品"
 # Trading の ConditionID → Inventory API の condition（契約表16章の値）
@@ -148,7 +169,11 @@ def main():
     if live and not tt.get("カナリア済み"):
         cap = min(cap, int(tt.get("カナリアの件数", 5)))
     loc = location_key(eb, cfg)
-    ledger_skus = {r["SKU"] for r in read_ledger()}
+    led = read_ledger()
+    ledger_skus = {r["SKU"] for r in led}
+    # 同じ型番を2品出さない（オーナーの決めごと）：台帳で出品中の型番＋この回に出す型番
+    live_models = [mkey(model_of(r.get("タイトル"))) for r in led if r.get("状態") == "出品中" and r.get("タイトル")]
+    live_models = [m for m in live_models if m]
     done, bad, skip, results, rows = [], [], [], [], []
     for it in queue[:cap]:
         pl = it["payload"]
@@ -156,6 +181,15 @@ def main():
             skip.append((pl.get("sku"), "仕入元がA・C以外（GASで出品し直す）"))
             results.append({"sku": pl.get("sku"), "error": "差し戻し：仕入元がフリマ・その他の店なので、GitHubの在庫の監視が見られない。GASで出品し直す"})
             continue
+        mk = model_in(pl)
+        dup = next((m for m in live_models if same_model(mk, m)), None) if mk else None
+        if dup:
+            skip.append((pl.get("sku"), "同じ型番がもう出品中（%s）" % dup))
+            if live:
+                results.append({"sku": pl.get("sku"), "error": "見送り：同じ型番がもう出品中（%s・同じ型番は2品出さない）" % dup})
+            continue
+        if mk:
+            live_models.append(mk)
         item, offer, why = build(pl, loc)
         if not item:
             skip.append((pl.get("sku"), why))
