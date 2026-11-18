@@ -24,7 +24,7 @@ def candidates(ledger, cfg):
     stk = cfg.get("有在庫の目印_SKUの頭", "STK-")
     return [r for r in ledger if r.get("SKU") and not r["SKU"].startswith(stk) and not r["SKU"].startswith("要付与-")
             and not r.get("offerId")   # 11/18 夜：ゲーム・キャラクターの今の出品も移す（値段の調整だけ。新しくは出さない決めごとAはそのまま）
-            and r.get("eBayの出品ID") and r.get("状態") == "出品中" and "mercari" not in (r.get("仕入元URL") or "")
+            and r.get("eBayの出品ID") and r.get("状態") == "出品中"   # 11/18 夜：メルカリの品も移す（値段の調整・値下げ交渉だけ。在庫は機械で見ない）
             and (kind_of(r.get("仕入元URL"), cfg) in ("A", "B", "C") or not r.get("仕入元URL"))]   # 11/18 夜：B（1日1回）と、仕入元URLの無い古い出品（値段の調整だけ）も移す
 
 

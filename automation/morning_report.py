@@ -112,6 +112,22 @@ def main():
                 lines.append("eBayの未読メッセージ：%s件%s（返事はあなたが Seller Hub で）" % (nu.group(1), "・旗つき %s件" % fl.group(1) if fl else ""))
     except Exception as e:
         lines.append("（メッセージの件数を読めなかった：%s）" % type(e).__name__)
+    # 2d) 配送ポリシーの点検（GAS の policyAudit の代わり）：GitHub で使う配送ポリシーが、アメリカに送れる設定か（オーナー「アメリカは絶対外さないで」）
+    try:
+        eb2 = Ebay()
+        if eb2.ready():
+            pol_ids = {"327189638011", "324953444011", "324953445011", "326778157011", "326770233011"}
+            _, pj = eb2.call("GET", "/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_US")
+            badp = []
+            for fp in pj.get("fulfillmentPolicies", []):
+                if str(fp.get("fulfillmentPolicyId")) not in pol_ids:
+                    continue
+                ex = [x.get("regionName", "") for x in (fp.get("shipToLocations") or {}).get("regionExcluded", []) or []]
+                if any(e in ("US", "United States", "UNITED_STATES") for e in ex):
+                    badp.append("%s（%s）" % (fp.get("name", ""), fp.get("fulfillmentPolicyId")))
+            lines.append("配送ポリシー：" + ("⚠ アメリカが外れている：" + "・".join(badp) if badp else "アメリカに送れる（%d個を確かめた）" % len([f for f in pj.get("fulfillmentPolicies", []) if str(f.get("fulfillmentPolicyId")) in pol_ids])))
+    except Exception as e:
+        lines.append("（配送ポリシーを読めなかった：%s）" % type(e).__name__)
     # 3) 止まっているプログラム
     tt = load_json(os.path.join(ROOT, "時刻表.json"), {}).get("プログラム", {})
     stop = []
