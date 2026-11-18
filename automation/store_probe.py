@@ -4,6 +4,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, save_json, jst
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+STORES2 = [
+    ("八百富_suggest", "https://www.yaotomi.co.jp", "/search/suggest.json?q=Nikon%20D3300&resources[type]=product&resources[limit]=10"),
+    ("イシバシ_keyword", "https://store.ishibashi.co.jp", "/search?keyword=BOSS%20DD-3"),
+    ("イシバシ_q", "https://store.ishibashi.co.jp", "/search?q=BOSS+DD-3&limit=72"),
+    ("イシバシ_word", "https://store.ishibashi.co.jp", "/search?word=BOSS%20DD-3"),
+    ("トレファク_q", "https://ec.treasure-f.com", "/search?q=SEIKO%20SBDC"),
+    ("トレファク_word", "https://ec.treasure-f.com", "/search?searchWord=SEIKO%20SBDC"),
+    ("フジヤ_top", "https://www.fujiya-camera.co.jp", "/"),
+    ("フジヤ_suggest", "https://www.fujiya-camera.co.jp", "/search/suggest.json?q=Nikon&resources[type]=product"),
+    ("PEEK_top", "https://peekaboo-camera.com", "/"),
+    ("PEEK_suggest", "https://peekaboo-camera.com", "/search/suggest.json?q=Nikon&resources[type]=product"),
+]
 STORES = [
     ("イシバシ楽器", "https://www.ishibashi.co.jp", "/ec/search?q=BOSS%20DD-3"),
     ("イシバシ楽器2", "https://www.ishibashi.co.jp", "/search/?q=BOSS"),
@@ -30,7 +42,7 @@ def get(url):
 
 
 out = {}
-for name, host, path in STORES:
+for name, host, path in (STORES2 if os.environ.get("PROBE2") else STORES):
     c1, robots, _ = get(host + "/robots.txt")
     c2, html, final = get(host + path)
     text = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", html, flags=re.I)
@@ -41,5 +53,5 @@ for name, host, path in STORES:
                  "本文の一部": re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text))[:4000],
                  "HTMLの一部": html[:200] + " … " + html[len(html) // 3: len(html) // 3 + 6000]}
     time.sleep(3)
-save_json(os.path.join(ROOT, "data", "店の下調べ", "probe.json"), {"時刻": jst(), "店": out})
+save_json(os.path.join(ROOT, "data", "店の下調べ", ("probe2.json" if os.environ.get("PROBE2") else "probe.json")), {"時刻": jst(), "店": out})
 print("\n".join("%s：robots %s・検索 %s・%d文字・値段 %d" % (k, v["robots_code"], v["search_code"], v["len"], len(v["値段の例"])) for k, v in out.items()))

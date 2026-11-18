@@ -31,6 +31,7 @@ jobs:
           GAS_SEND_TOKEN: ${{ secrets.GAS_SEND_TOKEN }}
         run: |
           mkdir -p data_repo/data/ログ
+          export PROBE2=1
           rc=0
           python3 automation/store_probe.py > "data_repo/data/ログ/store_probe.log" 2>&1 || rc=$?
           echo "終わり（コード $rc）。中身はデータ置き場の data/ログ/store_probe.log"
