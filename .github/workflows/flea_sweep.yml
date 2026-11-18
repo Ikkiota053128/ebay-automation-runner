@@ -4,10 +4,7 @@
 name: フリマ新着の地引網
 on:
   schedule:
-    - cron: "43 22 * * *"
-    - cron: "43 4 * * *"
-    - cron: "13 9 * * *"
-    - cron: "13 12 * * *"
+    - cron: "13 */2 * * *"
   workflow_dispatch:
     inputs:
       pages:
