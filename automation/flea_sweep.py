@@ -609,8 +609,8 @@ def main():
         if why:
             stops.append(why)
     # 11/14 オーナー承認（「はい」）：コメ兵の新入荷（時計・カメラなど）。一覧だけ・6秒以上あける
-    # 11/18 外す：コメ兵は規約で写真・文章の転載を禁止しているため（CLAUDE.md 18章）
-    if False and "コメ兵" not in stopped_today and time.time() < t_end + 120:
+    # 11/18 22:21 オーナー「取り得ず今は使って」：コメ兵を戻す
+    if "コメ兵" not in stopped_today and time.time() < t_end + 120:
         paths = cfg.get("コメ兵の一覧", ["/watch/?new=0", "/camera/?new=0", "/search/?new=0"])
         why = sweep(Polite(max(gap, 6), KMH), paths, parse_kmh, lambda pth: pth, models, seen, stat, cands, nomatch, t_end + 180, stop_p, today, "コメ兵")
         if why:
