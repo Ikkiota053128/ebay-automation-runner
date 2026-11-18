@@ -36,7 +36,7 @@ def is_acc_ja(t, model):
     return bool(ACC_JA.search(t)) and not re.search(r"本体|ボディ(?!キャップ)|一式", t)
 
 
-NEW_JA = re.compile(r"新品|未開封")
+NEW_JA = re.compile(r"新品|未開封|未使用品?(?!に近い)|国内正規品|正規品|メーカー保証|保証書付|メーカー1年保証|当店保証1年|在庫あり|即納")
 USED_JA = re.compile(r"中古|ユーズド|USED|used|美品|良品|ジャンク|難あり|訳あり|開封品|展示品|アウトレット|未使用に近い")
 
 
