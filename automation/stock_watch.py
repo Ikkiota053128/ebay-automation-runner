@@ -42,12 +42,26 @@ def rakuten_stock(url):
     q = {"format": "json", "formatVersion": 2, "applicationId": rid, "itemCode": "%s:%s" % (m.group(1), m.group(2)), "availability": 0, "hits": 1}
     req = urllib.request.Request(relay.rstrip("/") + "/search?" + urllib.parse.urlencode(q),
                                  headers={"User-Agent": UA, "accessKey": acc, "X-Relay-Token": tok})
-    try:
-        j = json.loads(urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace"))
-    except urllib.error.HTTPError as e:
-        return None, "楽天API HTTP %s" % e.code
-    except Exception as e:
-        return None, "楽天API %s" % str(e)[:80]
+    j = None
+    for k in range(3):   # 楽天のAPIは GAS・店の地引網と同じ鍵 → 429 なら少し待ってやり直す
+        try:
+            j = json.loads(urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace"))
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and k < 2:
+                time.sleep(6 * (k + 1))
+                continue
+            try:
+                body = e.read().decode("utf-8", "replace")[:120]
+            except Exception:
+                body = ""
+            return None, "楽天API HTTP %s %s" % (e.code, body)
+        except Exception as e:
+            return None, "楽天API %s" % str(e)[:80]
+    if j is None:
+        return None, "楽天API 返事なし"
+    if False:
+        pass
     items = j.get("items") or j.get("Items") or []
     if not items:
         return None, "楽天APIで商品が見つからない（消えた可能性）"
@@ -94,6 +108,7 @@ def main():
     rows.sort(key=lambda r: r.get("最後に仕入元を確認した日時", ""))   # 長く見ていない品から
     unk = load_json(os.path.join(ROOT, "data", "在庫の監視", "読めない回数.json"), {})
     out = {"ある": [], "ない": [], "読めない": []}
+    why_unk = {}
     zero, back, accident, gone404, alerts = [], [], [], [], []
     for r in rows:
         if time.time() > t_end:
@@ -109,6 +124,7 @@ def main():
         if ok is None:
             unk[r["SKU"]] = unk.get(r["SKU"], 0) + 1
             out["読めない"].append(r["SKU"])
+            why_unk[why[:60]] = why_unk.get(why[:60], 0) + 1
             if unk[r["SKU"]] == 3:
                 alerts.append("読めない状態が3回続いた %s（%s）" % (r["SKU"], why))
         else:
@@ -131,6 +147,10 @@ def main():
             len(out["ある"]), len(out["ない"]), len(out["読めない"]))]
     cap = int(tt.get("1回に在庫ゼロにする上限_件", 20))
     done, bad = [], []
+    if zero:
+        pass
+    if why_unk:
+        msg.append("読めなかった理由：" + "・".join("%s %d" % kv for kv in sorted(why_unk.items(), key=lambda x: -x[1])[:4]))
     if zero:
         msg.append("在庫を0にする%s %d件：%s" % ("" if live else "案", len(zero), ", ".join(r["SKU"] for r in zero[:20])))
     if live and zero:
@@ -168,7 +188,7 @@ def main():
         save_ledger(done, ["状態"], NAME)
     save_json(os.path.join(ROOT, "data", "在庫の監視", now().strftime("%Y%m%d_%H%M") + ".json"),
               {"時刻": jst(), "本番": live, "ある": out["ある"], "ない": out["ない"], "読めない": out["読めない"],
-               "在庫を0にした": [r["SKU"] for r in done], "失敗": bad, "戻った": back, "事故": accident})
+               "在庫を0にした": [r["SKU"] for r in done], "失敗": bad, "戻った": back, "事故": accident, "読めない理由": why_unk})
     write_run(NAME, not bad, len(rows), len(bad) + len(alerts))
     notify("\n".join(msg))
     return 0
