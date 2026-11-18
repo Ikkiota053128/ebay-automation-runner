@@ -286,10 +286,32 @@ def gas_get_models():
     try:
         q = url + "?" + urllib.parse.urlencode({"page": "models", "token": tok})
         d = json.loads(urllib.request.urlopen(urllib.request.Request(q, headers={"User-Agent": "ebay-automation"}), timeout=120).read().decode("utf-8"))
-        return d if d.get("models") else None
+        return with_github_models(d) if d.get("models") else None
     except Exception as e:
         print("ツールの型番リストを読めなかった：", type(e).__name__)
         return None
+
+
+def with_github_models(d):
+    """GAS の型番リストに、GitHub が育てた型番（data/型番リスト/追加.json）を足す。出品中かどうかは台帳のタイトルで見る"""
+    try:
+        from common import ROOT as _R, load_json as _lj, read_ledger as _rl
+        add = _lj(os.path.join(_R, "data", "型番リスト", "追加.json"), [])
+        if not add:
+            return d
+        k = lambda s: re.sub(r"[^A-Z0-9]", "", str(s or "").upper())
+        have = {k(m.get("model")) for m in d["models"]}
+        big = "|" + "|".join(re.sub(r"[\-‐－]", "", (r.get("タイトル") or "").upper()) for r in _rl() if r.get("状態") == "出品中") + "|"
+        for a in add:
+            kk = k(a["model"])
+            if kk in have:
+                continue
+            have.add(kk)
+            d["models"].append({"maker": a["maker"], "model": a["model"], "cap": int(round(float(a.get("med") or 0) * 152 * 0.5)),
+                                "listed": re.search(r"(?<![A-Z0-9])" + re.escape(re.sub(r"[\-‐－]", "", a["model"].upper())) + r"(?![A-Z0-9])", big) is not None})
+    except Exception as e:
+        print("GitHubの型番の追加を読めなかった：", type(e).__name__)
+    return d
 
 
 def gas_post(data):

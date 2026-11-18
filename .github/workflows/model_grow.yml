@@ -1,0 +1,53 @@
+# 型番リストを育てる（日本時間 3時間おき 33分。cron は UTC）
+# 公開リポジトリ：プログラムだけ。台帳・記録・設定は非公開のデータ置き場（ebay-automation）を読み書きする。
+# 公開のログには件数も品名も出さない（中身は data/ログ/ に保存して、データ置き場へ）
+name: 型番リストを育てる
+on:
+  schedule:
+    - cron: "33 */3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: model-grow
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ikkiota053128/ebay-automation
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data_repo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 型番リストを育てる
+        env:
+          LEDGER_ROOT: ${{ github.workspace }}/data_repo
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          GAS_WEBAPP_URL: ${{ secrets.GAS_WEBAPP_URL }}
+          GAS_SEND_TOKEN: ${{ secrets.GAS_SEND_TOKEN }}
+        run: |
+          mkdir -p data_repo/data/ログ
+          rc=0
+          python3 automation/model_grow.py > "data_repo/data/ログ/model_grow.log" 2>&1 || rc=$?
+          echo "終わり（コード $rc）。中身はデータ置き場の data/ログ/model_grow.log"
+          exit $rc
+      - name: 台帳と記録をデータ置き場に保存
+        if: always()
+        working-directory: data_repo
+        run: |
+          git config user.name "ebay-automation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/ 台帳.csv 2>/dev/null || git add data/
+          git diff --cached --quiet && exit 0
+          git commit -q -m "型番リストを育てる：記録 $(TZ=Asia/Tokyo date '+%m/%d %H:%M') JST"
+          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
+          echo "保存に失敗"; exit 1
