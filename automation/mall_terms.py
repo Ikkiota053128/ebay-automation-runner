@@ -8,7 +8,20 @@
 import collections, csv, glob, json, os, re, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, load_json, save_json, jst, notify, write_run, mark_started, read_ledger
-from stock_watch import fetch
+from stock_watch import fetch as _fetch
+import urllib.request, urllib.error
+
+
+def fetch(u):
+    try:
+        r = urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'ja'}), timeout=12)
+        b = r.read()
+        enc = 'euc-jp' if re.search(rb'charset=["\']?euc-jp', b[:3000], re.I) else 'cp932' if re.search(rb'charset=["\']?(shift_jis|sjis|windows-31j)', b[:3000], re.I) else 'utf-8'
+        return r.status, b.decode(enc, 'replace')
+    except urllib.error.HTTPError as e:
+        return e.code, ''
+    except Exception as e:
+        return None, str(e)[:100]
 
 NAME = "モールの店の規約"
 RESALE = re.compile(r"(転売|再販|営利|せどり|業者)[^。]{0,60}(できません|できない|禁止|お断り|不可|取り消|取消|キャンセル|ご遠慮|控え|停止)|"
@@ -48,7 +61,12 @@ def main():
     res = load_json(res_p, {})
     limit = int(os.environ.get("MALL_TERMS_MAX", "250"))
     todo = [k for k, _ in cnt.most_common() if not res.get(k, {}).get("読んだ日時", "").startswith(jst()[:7])][:limit]
-    for k in todo:
+    t_end = time.time() + 60 * float(os.environ.get("MALL_TERMS_MIN", "45"))
+    done = []
+    for i, k in enumerate(todo):
+        if time.time() > t_end:
+            break
+        done.append(k)
         hit_r, hit_c, codes, warranty = [], [], [], []
         for u in pages_of(k):
             code, html = fetch(u)
@@ -63,16 +81,18 @@ def main():
                 if COPY.search(s):
                     hit_c.append(s.strip()[:200])
         st = "読めない" if not any(c == 200 for c in codes) else ("使わない" if hit_r or hit_c else "OK")
+        if i % 10 == 9:
+            save_json(res_p, res)
         res[k] = {"結果": st, "転売の文": hit_r[:3], "転載の文": hit_c[:3], "保証だけの文": warranty[:2], "HTTP": codes, "読んだ日時": jst(), "重み": cnt[k]}
     save_json(res_p, res)
     bad = sorted(k for k, v in res.items() if v["結果"] == "使わない")
     save_json(os.path.join(ROOT, "data", "判定", "使わない店.json"), {"更新": jst(), "店": bad,
               "_説明": "楽天(R:)・Yahoo!(Y:)の店の規約で、転売目的の購入を断る・写真や文章の転載を禁止している店（mall_terms.py）"})
-    c = collections.Counter(v["結果"] for k, v in res.items() if k in todo)
-    msg = "【モールの店の規約】%s 読んだ %d店（OK %d・使わない %d・読めない %d）。使わない店は全部で %d店" % (jst(), len(todo), c["OK"], c["使わない"], c["読めない"], len(bad))
+    c = collections.Counter(v["結果"] for k, v in res.items() if k in done)
+    msg = "【モールの店の規約】%s 読んだ %d店（OK %d・使わない %d・読めない %d・残り %d店は次の回）。使わない店は全部で %d店" % (jst(), len(done), c["OK"], c["使わない"], c["読めない"], len(todo) - len(done), len(bad))
     print(msg)
     notify(msg)
-    write_run(NAME, True, len(todo), 0)
+    write_run(NAME, True, len(done), 0)
     return 0
 
 
