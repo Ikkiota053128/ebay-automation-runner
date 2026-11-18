@@ -106,7 +106,8 @@ def next_sku(c, n):
     d = load_json(p, {"n": 0})
     d["n"] = int(d["n"]) + 1
     save_json(p, d)
-    return "G%s-%06d" % ("RK" if c["src"] == "楽天" else "YS", d["n"])
+    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF"}.get(c["src"], "ST")
+    return "G%s-%06d" % (code, d["n"])
 
 
 def withdraw_asked(eb, live):
@@ -181,7 +182,8 @@ def main():
     live_models = [m for m in (mkey(model_of(r.get("タイトル"))) for r in led if r.get("状態") == "出品中" and r.get("タイトル")) if m]
     done_p = os.path.join(ROOT, "data", "判定", "判定済み.json")
     done = {k: v for k, v in load_json(done_p, {}).items() if v.get("t", 0) >= now().timestamp() - 14 * 86400}
-    back = load_json(os.path.join(ROOT, "data", "店の地引網", "送る待ち.json"), [])
+    back = load_json(os.path.join(ROOT, "data", "店の地引網", "送る待ち.json"), []) + \
+        load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), [])
     # 同じ型番は一番安い1品。判定済み・出品中の型番は飛ばす
     best = {}
     for c in sorted(back, key=lambda c: c["price"]):
@@ -286,6 +288,22 @@ def main():
         time.sleep(0.5)
     if rows:
         save_ledger(rows, list(rows[0].keys()), NAME)
+    # 店のサイトの地引網の品で「GASへ」になったものは、ここから GAS に送る（店の地引網の品は、店の地引網が送る）
+    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
+    if live and to_gas:
+        try:
+            from flea_sweep import gas_post
+            for src in sorted({c["src"] for c in to_gas}):
+                part = [c for c in to_gas if c["src"] == src]
+                for i in range(0, len(part), 15):
+                    gas_post({"kind": "search", "perItem": True, "noAi": True, "keyword": "", "url": part[0]["url"].split("/")[0] + "//" + part[0]["url"].split("/")[2] + "/",
+                              "site": src + "（GitHubの地引網）", "items": [{"url": c["url"], "title": c["title"][:200], "price": c["price"], "sold": False,
+                                                                       "thumb": "\n".join(c.get("photos") or []), "model": c["型番"], "maker": c["メーカー"]} for c in part[i:i + 15]]})
+                    time.sleep(3)
+            for c in to_gas:
+                done[c["id"]] = {"t": now().timestamp(), "結論": "GASへ送った"}
+        except Exception as e:
+            print("GASへ送れなかった：", str(e)[:200])
     gas_note = ""
     if gas_items and tt.get("GASにv664"):
         try:

@@ -4,7 +4,7 @@
 - 店ごとに、その店で扱う種類のメーカーの型番だけ探す。1回に1店あたり「1回に見る型番の数」まで。アクセスは「間隔_秒」に1回。
 - 検索結果の商品リンクのそばに型番がある品だけ、商品ページを開いて JSON-LD（商品名・値段・在庫・写真）を読む。
 - 残す条件は店の地引網と同じ（仕入れ上限以下・在庫あり・レンタル／ジャンク／付属品でない・商品名に型番）。前に見た品は14日間見ない。
-- 本番では GAS に送る（GAS が判定。今までブラウザで送っていたのと同じ受け口）。実行 false の間はドライラン。
+- 本番では「送る待ち」に入れ、GitHub の判定と出品（judge_list.py）が判定・出品する。GitHub が扱えない品だけ GAS へ。実行 false の間はドライラン。
 """
 import json, os, re, sys, time, urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -116,25 +116,24 @@ def main():
                 st["候補"] += 1
     save_json(seen_p, seen)
     save_json(cur_p, cur)
+    # 本番：候補を「送る待ち」に入れる → GitHub の判定と出品（judge_list.py）が判定して出品する。GitHub が扱えない品だけ、判定と出品が GAS へ送る
     sent = 0
     if live and cands:
-        for s in STORES:
-            part = [c for c in cands if c["src"] == s["name"]]
-            for i in range(0, len(part), 15):
-                txt = gas_post({"kind": "search", "perItem": True, "noAi": True, "keyword": "", "url": "https://" + s["host"] + "/", "site": s["name"] + "（GitHubの地引網）",
-                                "items": [{"url": c["url"], "title": c["title"][:200], "price": c["price"], "sold": False, "thumb": "\n".join(c["photos"]),
-                                           "model": c["型番"], "maker": c["メーカー"]} for c in part[i:i + 15]]})
-                if "合言葉が一致しません" in txt:
-                    raise SystemExit("GASが受け取りを断った")
-                sent += len(part[i:i + 15])
-                time.sleep(3)
+        back_p = os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json")
+        back = {c["id"]: c for c in load_json(back_p, []) if c.get("t", 0) >= now().timestamp() - 3 * 86400}
+        for c in cands:
+            c["t"] = now().timestamp()
+            c["ratio"] = round(c["price"] / c["cap"], 3) if c.get("cap") else 1.0
+            back.setdefault(c["id"], c)
+        save_json(back_p, list(back.values()))
+        sent = len(cands)
     save_json(os.path.join(ROOT, "data", "店のサイトの地引網", now().strftime("%Y%m%d_%H%M%S") + ".json"),
               {"時刻": jst(), "本番": live, "数": stat, "外した理由": why, "候補": [{k: c[k] for k in ("src", "型番", "price", "title", "url")} for c in cands], "送った": sent})
     msg = ["【店のサイトの地引網】%s %s" % (jst(), "本番" if live else "ドライラン")]
     msg += ["%s：検索 %d・商品ページ %d・候補 %d・読めない %d" % (k, v["検索"], v["商品ページ"], v["候補"], v["読めない"]) for k, v in stat.items()]
     if why:
         msg.append("外した理由：" + "・".join("%s %d" % kv for kv in sorted(why.items(), key=lambda x: -x[1])[:6]))
-    msg.append(("GASへ送った %d品" % sent) if live else ("候補 %d品（ドライランなのでGASには送っていない）" % len(cands)))
+    msg.append(("GitHubの判定と出品へ渡した %d品" % sent) if live else ("候補 %d品（ドライランなのでGASには送っていない）" % len(cands)))
     print("\n".join(msg))
     notify("\n".join(msg))
     write_run(NAME, True, len(cands), 0)
