@@ -19,7 +19,7 @@ MUS = r"boss|roland|mxr|maxon|ibanez|korg|yamaha|electro-harmonix|ehx|tc electro
 STORES = [
     {"name": "イシバシ楽器", "host": "store.ishibashi.co.jp", "search": "https://store.ishibashi.co.jp/search?q={q}&limit=72&sort=Score", "link": r"https://store\.ishibashi\.co\.jp/view/item/\d+", "makers": MUS},
     # 11/18 22:28 オーナー「はい」（新しい仕入れ先の開拓）：大貫カメラ・荻窪カメラのさくらや・オーディオユニオン
-    {"name": "大貫カメラ", "host": "www.camera-ohnuki.com", "search": "https://www.camera-ohnuki.com/search?q={q}&type=product&options%5Bunavailable_products%5D=hide", "link": r"/products/[a-z0-9\-%]+", "makers": CAM},
+    {"name": "大貫カメラ", "host": "www.camera-ohnuki.com", "search": "https://www.camera-ohnuki.com/search?q={q}&type=product&options%5Bunavailable_products%5D=hide", "link": r"/products/[A-Za-z0-9\-%]+", "makers": CAM},
     {"name": "荻窪カメラのさくらや", "host": "www.ogisaku.com", "search": "https://www.ogisaku.com/products/list.php?mode=search&name={q}", "link": r"(?:https://www\.ogisaku\.com)?/products/detail\.php\?product_id=\d+", "makers": CAM},
     {"name": "オーディオユニオン", "host": "www.audiounion.jp", "search": "https://www.audiounion.jp/shop/goods/search.aspx?search=x&keyword={q}", "link": r"/shop/g/g[0-9A-Za-z]+/?", "makers": r"sony|technics|pioneer|marantz|denon|yamaha|accuphase|luxman|onkyo|kenwood|sansui|audio-technica|nakamichi|teac|tascam|akai|victor|aiwa|stax|fostex|ortofon|shure|sennheiser|beyerdynamic|akg"},
     # カメラの八百富は外す（11/18 オーナー承認）：規約 第16条で、写真・文章の無断の複製・転載を禁止しているため
