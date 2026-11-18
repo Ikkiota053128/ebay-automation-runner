@@ -147,6 +147,28 @@ class Ebay:
                     continue
                 raise EbayError(e.code, j)
 
+    def upload_image(self, path):
+        """手元の写真を eBay に上げて、eBay の写真のアドレスを返す（Media API。人が送った写真用）"""
+        import mimetypes, uuid
+        bd = "----ebay" + uuid.uuid4().hex
+        data = open(path, "rb").read()
+        ct = mimetypes.guess_type(path)[0] or "image/jpeg"
+        body = ("--%s\r\nContent-Disposition: form-data; name=\"image\"; filename=\"%s\"\r\nContent-Type: %s\r\n\r\n" % (bd, os.path.basename(path), ct)).encode() + data + ("\r\n--%s--\r\n" % bd).encode()
+        base = "https://apim.ebay.com/commerce/media/v1_beta/image"
+        h = {"Authorization": "Bearer " + self._token("user"), "Content-Type": "multipart/form-data; boundary=" + bd}
+        try:
+            r = self.open(urllib.request.Request(base + "/create_image_from_file", data=body, method="POST", headers=h), timeout=120)
+        except urllib.error.HTTPError as e:
+            raise EbayError(e.code, {"raw": e.read().decode("utf-8", "replace")[:2000]})
+        raw = r.read()
+        j = json.loads(raw) if raw else {}
+        if j.get("imageUrl"):
+            return j["imageUrl"]
+        loc = r.headers.get("Location", "")
+        iid = loc.rstrip("/").split("/")[-1]
+        r2 = self.open(urllib.request.Request(base + "/" + iid, headers={"Authorization": "Bearer " + self._token("user"), "Accept": "application/json"}), timeout=60)
+        return json.loads(r2.read()).get("imageUrl", "")
+
     def trading(self, call, xml_body):
         """Trading API（XML）。読むだけの呼び出しにだけ使う（GetMyMessages の件数など）"""
         body = ('<?xml version="1.0" encoding="utf-8"?><%sRequest xmlns="urn:ebay:apis:eBLBaseComponents">%s</%sRequest>' % (call, xml_body, call)).encode()

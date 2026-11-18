@@ -42,6 +42,8 @@ def take_answers(led):
         sku = str(a.get("SKU", ""))
         r = led.get(sku)
         kind = a.get("種類", "")
+        if kind in ("仕入元を見た",):   # 在庫の監視が取り込む
+            continue
         if kind == "仕入れた" and r:
             ym = now().strftime("%Y%m")
             fp = os.path.join(ROOT, "data", "古物台帳", ym + ".csv")

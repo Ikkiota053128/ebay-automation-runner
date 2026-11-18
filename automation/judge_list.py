@@ -9,7 +9,7 @@
 - 出した品は台帳に1行・GAS へ kind=ghnew（「GASにv664」が true のときだけ）。GAS の出品一覧に載り、GAS が同じ型番を出さない。
 - 検索（Browse）の残りが「Browseの残りの下限」より少ないときは止める（GAS の分を残す）。
 """
-import collections, json, os, re, sys, time
+import collections, json, os, re, statistics, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import (ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
                     mark_started, load_json, save_json, browse_stopped, browse_stop, listing_limit_stopped, listing_limit_stop,
@@ -219,7 +219,7 @@ def next_sku(c, n):
     d = load_json(p, {"n": 0})
     d["n"] = int(d["n"]) + 1
     save_json(p, d)
-    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO"}.get(c["src"], "ST")
+    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR"}.get(c["src"], "ST")
     return "G%s-%06d" % (code, d["n"])
 
 
@@ -300,7 +300,8 @@ def main():
     done_p = os.path.join(ROOT, "data", "判定", "判定済み.json")
     done = {k: v for k, v in load_json(done_p, {}).items() if v.get("t", 0) >= now().timestamp() - 14 * 86400}
     back = load_json(os.path.join(ROOT, "data", "店の地引網", "送る待ち.json"), []) + \
-        load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), []) + (gas_cands() if tt.get("GASにv667") else [])
+        load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), []) + (gas_cands() if tt.get("GASにv667") else []) + \
+        load_json(os.path.join(ROOT, "data", "人の候補", "送る待ち.json"), [])   # メルカリ：人が集めた候補（教科書 第18章。プログラムはメルカリを開かない）
     # 同じ型番は一番安い1品。判定済み・出品中の型番は飛ばす
     best = {}
     for c in sorted(back, key=lambda c: c["price"]):
@@ -351,6 +352,8 @@ def main():
                 r.update(競合の数=len(act), 競合=act[:5], カテゴリ=cat)
                 if len(act) < 2:
                     r.update(結論="GASへ", 理由="同じ型番の競合が2件未満")
+                elif c["price"] > float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * statistics.median(act) * 152:
+                    r.update(結論="見送り", 理由="仕入値が相場の中央値の%d割を超える（教科書 第21章）" % round(float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * 10))
                 elif c["price"] < 0.2 * act[0] * 152:
                     r.update(結論="見送り", 理由="仕入値がeBayの最安の2割未満（付属品・別物の疑い）")
                 elif not kind:
@@ -368,12 +371,19 @@ def main():
                         r.update(値段=price, 利益=py, 利益率=round(pr, 4))
                         if py < qs["floorYen"] or pr < qs["floorRate"] - 1e-9:
                             r.update(結論="見送り", 理由="利益の条件を満たさない")
-                        elif len(c.setdefault("_photos", more_photos(c))) < int(tt.get("写真の最低枚数", 3)):
+                        elif c.get("写真ファイル") and len(c["写真ファイル"]) < int(tt.get("写真の最低枚数", 3)):
+                            r.update(結論="人に返す", 理由="送られた写真が%d枚未満" % int(tt.get("写真の最低枚数", 3)))
+                        elif not c.get("写真ファイル") and len(c.setdefault("_photos", more_photos(c))) < int(tt.get("写真の最低枚数", 3)):
                             r.update(結論="GASへ", 理由="写真が%d枚未満（GASが商品ページから集める）" % int(tt.get("写真の最低枚数", 3)))
                         else:
                             r.update(結論="GO")
                             live_models.append(k)
-                            if live and len(listed) < n_list and not listing_limit_stopped():
+                            if live and len(listed) < n_list and not listing_limit_stopped() and c.get("写真ファイル") and not c.get("_photos"):
+                                try:
+                                    c["_photos"] = [eb.upload_image(os.path.join(ROOT, f)) for f in c["写真ファイル"][:12]]
+                                except Exception as e:
+                                    r.update(結論="エラー", 理由="写真を eBay に上げられない：" + err_text(e)[:300] if isinstance(e, EbayError) else str(e)[:300])
+                            if r["結論"] == "GO" and live and len(listed) < n_list and not listing_limit_stopped():
                                 sku = next_sku(c, 0)
                                 pl = make_payload(c, kind, cat, cond, price, fp, ship, sku)
                                 item, offer, why = build(pl, loc)
@@ -402,13 +412,15 @@ def main():
                                             n_list = 0
         r["t"] = now().timestamp()
         res.append(r)
-        if live and r["結論"] in ("GO", "見送り") and (r["結論"] == "見送り" or r.get("出品")):   # 影の運転の間は記録しない（GAS に今までどおり送る）
+        if c.get("src") == "メルカリ（人）" and r["結論"] == "GASへ":
+            r["結論"] = "人に返す"
+        if live and r["結論"] in ("GO", "見送り", "人に返す") and (r["結論"] != "GO" or r.get("出品")):   # 影の運転の間は記録しない（GAS に今までどおり送る）
             done[c["id"]] = {"t": r["t"], "結論": r["結論"]}
         time.sleep(0.5)
     if rows:
         save_ledger(rows, list(rows[0].keys()), NAME)
     # 店のサイトの地引網の品で「GASへ」になったものは、ここから GAS に送る（店の地引網の品は、店の地引網が送る）
-    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
+    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!", "メルカリ（人）") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
     if live and to_gas:
         try:
             from flea_sweep import gas_post
@@ -439,6 +451,9 @@ def main():
     why = collections.Counter(x.get("理由", "") for x in res if x["結論"] in ("見送り", "GASへ"))
     if why:
         msg.append("理由：" + "・".join("%s %d" % (k[:30], v) for k, v in why.most_common(5)))
+    hum = [x for x in res if str(x.get("id", "")).startswith("人:")]
+    if hum:
+        msg.append("メルカリ（あなたが送った品）：" + " / ".join("%s %s%s" % (x["型番"], x["結論"], "（%s）" % x.get("理由", "")[:40] if x.get("理由") else "") for x in hum[:10]))
     if listed:
         msg.append("出品した %d品：" % len(listed) + "・".join("%s $%.2f" % (t[:40], p) for _, _, t, p in listed[:10]))
         if not tt.get("カナリア済み"):

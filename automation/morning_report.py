@@ -84,6 +84,17 @@ def main():
     n_sold_wait = sum(1 for r in led if r.get("状態") == "売れた")
     if n_sold_wait:
         lines.append("「売れた」のまま（発送後に 出品中に戻す／終了 を教えてください）：%d品" % n_sold_wait)
+    # 2a) メルカリ（機械で見ない仕入元）の見回り：人が、長く見ていない品から1日○品（教科書 第18章）
+    try:
+        from common import is_target, timetable as _tt
+        nm = int(_tt(NAME).get("メルカリを人が見る件数_1日", 10))
+        mer = sorted([r for r in led if is_target(r) and r.get("状態") in ("出品中", "売れた") and "mercari" in str(r.get("仕入元URL"))],
+                     key=lambda r: (r.get("状態") != "売れた", r.get("最後に仕入元を確認した日時", "")))
+        if mer:
+            lines.append("メルカリの見回り（%d品のうち、長く見ていない%d品）。見たら「SKU ある／ない」と Claude に：" % (len(mer), min(nm, len(mer))))
+            lines += ["・%s %s（前に見た：%s）" % (r["SKU"], r.get("仕入元URL"), (r.get("最後に仕入元を確認した日時") or "まだ")[:10]) for r in mer[:nm]]
+    except Exception as e:
+        lines.append("（メルカリの見回りの一覧を作れなかった：%s）" % type(e).__name__)
     # 2b) 昨日の売上・利益（台帳の仕入値・送料・手数料から。買い手の情報は使わない）
     try:
         by = {r["SKU"]: r for r in led}

@@ -609,7 +609,8 @@ def main():
         if why:
             stops.append(why)
     # 11/14 オーナー承認（「はい」）：コメ兵の新入荷（時計・カメラなど）。一覧だけ・6秒以上あける
-    if "コメ兵" not in stopped_today and time.time() < t_end + 120:
+    # 11/18 外す：コメ兵は規約で写真・文章の転載を禁止しているため（CLAUDE.md 18章）
+    if False and "コメ兵" not in stopped_today and time.time() < t_end + 120:
         paths = cfg.get("コメ兵の一覧", ["/watch/?new=0", "/camera/?new=0", "/search/?new=0"])
         why = sweep(Polite(max(gap, 6), KMH), paths, parse_kmh, lambda pth: pth, models, seen, stat, cands, nomatch, t_end + 180, stop_p, today, "コメ兵")
         if why:
@@ -623,8 +624,8 @@ def main():
         if why:
             stops.append(why)
     # 11/14 オーナー承認（「はい」）：カメラの八百富・PEEK A BOO CAMERA の新着（公開の一覧 JSON）。6秒以上あける
-    for lab, host, prs, paths in [("カメラの八百富", YAO, parse_yao, ["/collections/used/products.json?limit=50", "/collections/used/products.json?limit=50&page=2"]),
-                                  ("PEEK A BOO CAMERA", PAB, parse_pab, ["/wp-json/wc/store/v1/products?orderby=date&order=desc&per_page=50"])]:
+    # 11/18 カメラの八百富は外す（規約 第16条：写真・文章の無断転載の禁止。オーナー承認）
+    for lab, host, prs, paths in [("PEEK A BOO CAMERA", PAB, parse_pab, ["/wp-json/wc/store/v1/products?orderby=date&order=desc&per_page=50"])]:
         if lab not in stopped_today and time.time() < t_end + 180:
             why = sweep(Polite(max(gap, 6), host), paths, prs, lambda pth: pth, models, seen, stat, cands, nomatch, t_end + 240, stop_p, today, lab)
             if why:
@@ -639,6 +640,14 @@ def main():
     json.dump(sorted(seen)[-40000:], open(seen_p, "w", encoding="utf-8"))
     # 網を育てる：リストにない品の名前をツールへ（知らない型番を追加候補に。出品はしない）
     ml = ""
+    if nomatch:   # 知らないブランドの候補（brand_scout.py・教科書 第3章②）のために、リストにない品の名前を日ごとに残す
+        try:
+            nm_p = os.path.join(ROOT, "data", "型番リスト", "リストにない品", now().strftime("%Y%m%d") + ".json")
+            os.makedirs(os.path.dirname(nm_p), exist_ok=True)
+            old = json.load(open(nm_p, encoding="utf-8")) if os.path.exists(nm_p) else []
+            json.dump((old + nomatch)[-5000:], open(nm_p, "w", encoding="utf-8"), ensure_ascii=False)
+        except Exception:
+            pass
     if remote and nomatch:
         try:
             r = json.loads(gas_post({"kind": "mlcand", "titles": nomatch[:300]}))

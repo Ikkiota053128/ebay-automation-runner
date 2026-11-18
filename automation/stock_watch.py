@@ -111,6 +111,16 @@ def main():
                  or (kind_of(r.get("仕入元URL"), cfg) == "B" and "mercari" not in str(r.get("仕入元URL"))   # メルカリは機械で見ない（オーナーの決めごと）
                      and not str(r.get("最後に仕入元を確認した日時", "")).startswith(today)))]
     rows.sort(key=lambda r: r.get("最後に仕入元を確認した日時", ""))   # 長く見ていない品から
+    # メルカリなど機械で見ない仕入元は、人が見た答え（data/答え/ の {"種類": "仕入元を見た", "SKU": …, "結果": "ある"|"ない"}）を使う（教科書 第18章）
+    import glob, shutil
+    human, hfiles = {}, []
+    for f in sorted(glob.glob(os.path.join(ROOT, "data", "答え", "*.json"))):
+        a = load_json(f, {})
+        if a.get("種類") == "仕入元を見た" and a.get("結果") in ("ある", "ない"):
+            human[str(a.get("SKU", ""))] = a["結果"] == "ある"
+            hfiles.append(f)
+    have = {r["SKU"] for r in rows}
+    rows = [r for r in ledger if r["SKU"] in human and r["SKU"] not in have and is_target(r) and r.get("状態") in ("出品中", "在庫ゼロ", "売れた")] + rows
     unk = load_json(os.path.join(ROOT, "data", "在庫の監視", "読めない回数.json"), {})
     out = {"ある": [], "ない": [], "読めない": []}
     why_unk = {}
@@ -118,12 +128,15 @@ def main():
     for r in rows:
         if time.time() > t_end:
             break
-        ok, why = rakuten_stock(r["仕入元URL"])
         code = None
+        if r["SKU"] in human:
+            ok, why = human[r["SKU"]], "あなたが見た"
+        else:
+            ok, why = rakuten_stock(r["仕入元URL"])
         if ok == "skip":
             code, html = fetch(r["仕入元URL"])
             ok, why = judge(code, html)
-        else:
+        elif r["SKU"] not in human:
             time.sleep(1.5)   # 楽天APIの節度（1.5秒に1回）
         r["最後に仕入元を確認した日時"] = jst()
         if ok is None:
@@ -143,7 +156,8 @@ def main():
                 zero.append(r)
             elif r["状態"] == "在庫ゼロ" and ok:
                 back.append(r["SKU"])
-        time.sleep(gap)
+        if r["SKU"] not in human:
+            time.sleep(gap)
     save_json(os.path.join(ROOT, "data", "在庫の監視", "読めない回数.json"), unk)
     if accident:   # 事故はすぐ知らせる（第6章）
         notify("【在庫の監視・事故】売れたのに仕入元に無い：\n" + "\n".join(accident))
@@ -226,7 +240,12 @@ def main():
     if gone404:
         msg.append("仕入元のページが無くなった（404）：" + ", ".join(gone404[:20]))
     msg += alerts
-    usual_add(NAME, len(out["ない"]), scheduled)
+    usual_add(NAME, len([x for x in out["ない"] if x not in human]), scheduled)   # 人の答えは「ふだん」に数えない（10章 6）
+    if hfiles:
+        os.makedirs(os.path.join(ROOT, "data", "答え", "取り込み済み"), exist_ok=True)
+        for f in hfiles:
+            shutil.move(f, os.path.join(ROOT, "data", "答え", "取り込み済み", os.path.basename(f)))
+        msg.append("あなたが見た仕入元の答えを取り込んだ：%d件" % len(hfiles))
     # 台帳：確認日時（全部）と状態（0にできた品だけ）
     save_ledger(rows, ["最後に仕入元を確認した日時"], NAME)
     if done:
