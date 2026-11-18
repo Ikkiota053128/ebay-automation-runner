@@ -68,6 +68,20 @@ def auto_kind(cat, kinds):
             "ポリシー": {"発送": "327189638011", "支払い": "318927569011", "返品": "318925133011"}}
 
 
+_IPW = None
+
+
+def ip_bad(title):
+    global _IPW
+    if _IPW is None:
+        _IPW = [w for w in load_json(os.path.join(ROOT, "data", "判定", "IPの辞書.json"), []) if w["段階"] != "注意（条件つきで出品可）"]
+    t = str(title or "").lower()
+    for w in _IPW:
+        if re.search(r"(?<![a-z])" + re.escape(w["言葉"].lower()) + r"(?![a-z])", t):
+            return w["言葉"]
+    return ""
+
+
 def more_photos(c):
     """Yahoo!ショッピングは、APIの写真が1枚だけ。商品ページ（GitHub から読める）から同じ商品の写真（_1, _2 …）を集める。楽天のページは読めない"""
     ph = photos_of(c)
@@ -264,6 +278,8 @@ def main():
             r.update(結論="見送り", 理由="同じ型番がもう出品中（%s）" % dup)
         elif judge.RULE_OUT.search(judge.plain(c["title"])) or judge.RULE_OUT.search(c["型番"]):
             r.update(結論="見送り", 理由="キャラクター・ゲーム・限定品（決めごとA）")
+        elif ip_bad(c["title"]):
+            r.update(結論="見送り", 理由="規約のリスクの言葉（%s）" % ip_bad(c["title"]))
         elif judge.is_acc_ja(c["title"], c["型番"]):
             r.update(結論="見送り", 理由="付属品・部品（本体ではない）")
         elif kind_of(c["url"], cfg) not in ("A", "B", "C"):
