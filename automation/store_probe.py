@@ -5,16 +5,11 @@ from common import ROOT, save_json, jst
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 STORES2 = [
-    ("八百富_suggest", "https://www.yaotomi.co.jp", "/search/suggest.json?q=Nikon%20D3300&resources[type]=product&resources[limit]=10"),
-    ("イシバシ_keyword", "https://store.ishibashi.co.jp", "/search?keyword=BOSS%20DD-3"),
-    ("イシバシ_q", "https://store.ishibashi.co.jp", "/search?q=BOSS+DD-3&limit=72"),
-    ("イシバシ_word", "https://store.ishibashi.co.jp", "/search?word=BOSS%20DD-3"),
-    ("トレファク_q", "https://ec.treasure-f.com", "/search?q=SEIKO%20SBDC"),
-    ("トレファク_word", "https://ec.treasure-f.com", "/search?searchWord=SEIKO%20SBDC"),
-    ("フジヤ_top", "https://www.fujiya-camera.co.jp", "/"),
-    ("フジヤ_suggest", "https://www.fujiya-camera.co.jp", "/search/suggest.json?q=Nikon&resources[type]=product"),
-    ("PEEK_top", "https://peekaboo-camera.com", "/"),
-    ("PEEK_suggest", "https://peekaboo-camera.com", "/search/suggest.json?q=Nikon&resources[type]=product"),
+    ("フジヤ_a", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx?search=x&keyword=Nikon+D3300"),
+    ("フジヤ_b", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx?keyword=Nikon%20D3300&search=%E6%A4%9C%E7%B4%A2"),
+    ("フジヤ_c", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx?q=Nikon+D3300"),
+    ("フジヤ_d", "https://www.fujiya-camera.co.jp", "/shop/goods/search.aspx"),
+    ("八百富_s", "https://www.yaotomi.co.jp", "/search?q=Nikon%20D3300&type=product"),
 ]
 STORES = [
     ("イシバシ楽器", "https://www.ishibashi.co.jp", "/ec/search?q=BOSS%20DD-3"),
