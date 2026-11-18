@@ -2,12 +2,22 @@
 import os, re, sys, time, urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, save_json, jst
-from stock_watch import fetch
+from stock_watch import fetch as _f
+
+
+def fetch(u):
+    import urllib.request
+    try:
+        r = urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'ja'}), timeout=30)
+        b = r.read()
+        enc = 'cp932' if re.search(rb'charset=["\']?(shift_jis|sjis|x-sjis|windows-31j)', b[:3000], re.I) else 'utf-8'
+        return r.status, b.decode(enc, 'replace')
+    except Exception:
+        return _f(u)
 
 STORES = {
-    "カメラのナニワ（レモン社）": ("https://cameranonaniwa.jp/shop/default.aspx", 4, ["https://cameranonaniwa.jp/shop/goods/search.aspx?keyword=Nikon", "https://cameranonaniwa.jp/shop/goods/search.aspx?search=x&keyword=Nikon"]),
-    "クロサワ楽器": ("https://shop.kurosawagakki.com/", 4, ["https://shop.kurosawagakki.com/search?q=BOSS", "https://shop.kurosawagakki.com/products/list?keyword=BOSS"]),
-    "じゃんぱら（免責）": ("https://www.janpara.co.jp/contents/disclaimer/", 61, []),
+    "カメラのナニワ（規約）": ("https://cameranonaniwa.jp/shop/pages/guide.aspx", 4, []),
+    "カメラのナニワ（トップ）": ("https://cameranonaniwa.jp/", 4, []),
 }
 KEY = re.compile(r"転売|営利|再販|業者|転載|二次利用|複製|無断|ロボット|クローラ|スクレイピング|自動化|自動的|機械的|プログラム")
 
@@ -27,7 +37,7 @@ for name, (top, gap, guesses) in STORES.items():
     r["フォーム"] = forms
     links = []
     for l, t in re.findall(r'<a[^>]+href="([^"]+)"[^>]*>([\s\S]{0,80}?)</a>', html or "", re.I):
-        if re.search(r"kiyaku|terms|rule|policy|guide|規約|ご利用|利用案内|ショッピングガイド|特定商", l + t, re.I):
+        if re.search(r"kiyaku|terms|rule|policy|guide|agreement|規約|ご利用|利用案内|ショッピングガイド|特定商|免責|注意", l + t, re.I):
             u = urllib.parse.urljoin(top, l)
             if u not in links:
                 links.append(u)
