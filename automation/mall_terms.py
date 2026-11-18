@@ -30,6 +30,11 @@ COPY = re.compile(r"(転載|二次利用|二次使用|無断使用|無断転用|
 WARRANTY_ONLY = re.compile(r"(初期不良|保証|返品|交換)[^。]{0,40}(転売|再販)|(転売|再販)[^。]{0,40}(初期不良|保証|返品|交換)")
 
 
+# 規約を目で確かめて「使わない」と決めた店（11/18 オーナー承認の会社：ナニワ・キタムラ楽天・島村・イケベ・コメ兵・ソフマップ・ブックオフ、ほか規約の文を確かめた店）
+MANUAL = {"Y:theclockhouse", "Y:theclockhouse-y", "Y:homeshop", "Y:y-sofmap", "R:naniwa", "R:emedama", "R:shimamura-used", "R:ikebe", "Y:ikebe",
+          "R:komehyo-online", "R:dtc", "R:bookoffonline", "Y:bookoffonline"}
+
+
 def shop_of(url):
     m = re.match(r"https?://store\.shopping\.yahoo\.co\.jp/([^/?#]+)/", url or "") or re.match(r"https?://item\.rakuten\.co\.jp/([^/?#]+)/", url or "")
     if not m:
@@ -86,7 +91,8 @@ def main():
             save_json(res_p, res)
         res[k] = {"結果": st, "転売の文": hit_r[:3], "転載の文": hit_c[:3], "保証だけの文": warranty[:2], "HTTP": codes, "読んだ日時": jst(), "重み": cnt[k], "版": ver}
     save_json(res_p, res)
-    bad = sorted(k for k, v in res.items() if v["結果"] == "使わない")
+    manual = set(load_json(os.path.join(ROOT, "data", "判定", "使わない店.json"), {}).get("手で確かめた店", [])) | MANUAL
+    bad = sorted({k for k, v in res.items() if v["結果"] == "使わない" and v.get("版") == ver} | manual)
     save_json(os.path.join(ROOT, "data", "判定", "使わない店.json"), {"更新": jst(), "店": bad,
               "_説明": "楽天(R:)・Yahoo!(Y:)の店の規約で、転売目的の購入を断る・写真や文章の転載を禁止している店（mall_terms.py）"})
     c = collections.Counter(v["結果"] for k, v in res.items() if k in done)
