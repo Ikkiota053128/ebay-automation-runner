@@ -272,8 +272,24 @@ def listing_limit_stop(msg):
     """月の上限なので、次の月の1日（米国太平洋時間 0:00 ＝ 日本時間 17:00）まで出品を止める。上限を上げてもらったら、このファイルを消せば再開"""
     pt = now().astimezone(dt.timezone(dt.timedelta(hours=-8)))
     nxt = (pt.replace(day=28) + dt.timedelta(days=4)).replace(day=1, hour=0, minute=5, second=0, microsecond=0)
+    m = re.search(r"list up to USD ([\d,]+(?:\.\d+)?) more", str(msg))
     save_json(LIMIT_STOP, {"止めた時刻": jst(), "再開してよい時刻": nxt.astimezone(JST).isoformat(), "eBayの返事": str(msg)[:600],
-                           "_説明": "eBay の出品の上限（月）。上限を上げてもらったら、このファイルを消すと再開"})
+                           "残りの金額_ドル": float(m.group(1).replace(",", "")) if m else 0.0,
+                           "_説明": "eBay の出品の上限（月）。上限を上げてもらったら、このファイルを消すと再開。"
+                                    "残りの金額があるうちは、その金額に収まる品だけ出す（11/19 14:08 オーナー「出品枠額がなくなるまで出品して」）"})
+
+
+def listing_limit_left():
+    """上限で止めている間の、今月の残りの金額（ドル）。止めていなければ None"""
+    d = listing_limit_stopped()
+    return None if not d else float(d.get("残りの金額_ドル") or 0)
+
+
+def listing_limit_spend(usd):
+    d = load_json(LIMIT_STOP)
+    if d:
+        d["残りの金額_ドル"] = round(max(0.0, float(d.get("残りの金額_ドル") or 0) - float(usd)), 2)
+        save_json(LIMIT_STOP, d)
 
 
 def browse_stopped():

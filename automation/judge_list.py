@@ -12,7 +12,7 @@
 import collections, json, os, re, statistics, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import (hand_only, ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
-                    mark_started, load_json, save_json, browse_stopped, browse_stop, listing_limit_stopped, listing_limit_stop,
+                    mark_started, load_json, save_json, browse_stopped, browse_stop, listing_limit_stopped, listing_limit_stop, listing_limit_left, listing_limit_spend,
                     is_limit_error)
 from price_adjust import model_of
 import judge
@@ -277,6 +277,12 @@ def main():
         notify("【判定と出品】" + wd_note)
         wd_note = ""
     ls = listing_limit_stopped()
+    left = listing_limit_left()
+    cap_usd = float(tt.get("今出す売値の上限_ドル", 0) or 0)   # 11/19 14:08 オーナー「今は高額商品出品しないで」（0 なら上限なし）
+    min_usd = float(tt.get("上限の残りで出す最低の売値_ドル", 60))
+    if ls and live and left is not None and left >= min_usd:
+        print("eBay の出品の上限：今月の残り $%.2f に収まる品だけ出す（11/19 14:08 オーナー「出品枠額がなくなるまで出品して」）" % left)
+        ls = None
     if ls and live:
         print("eBay の出品の上限に当たったので、%s まで出品しない（判定もしない）" % ls["再開してよい時刻"][:16])
         ad = promote_new(eb, float(tt.get("広告率", 2.0)))
@@ -418,12 +424,14 @@ def main():
                                 r.update(結論="GO確認待ち", 理由="メルカリはオーナーのGOで出品")
                                 mgo[c["id"]] = {"t": now().timestamp(), "商品": mid, "型番": c["型番"], "仕入値": c["price"], "値段": price, "利益": py, "url": c["url"],
                                                 "候補": {kk: vv for kk, vv in c.items() if not kk.startswith("_")}}
-                            if live and len(listed) < n_list and not listing_limit_stopped() and c.get("写真ファイル") and not c.get("_photos"):
+                            if live and len(listed) < n_list and (not listing_limit_stopped() or (listing_limit_left() or 0) >= min_usd) and c.get("写真ファイル") and not c.get("_photos"):
                                 try:
                                     c["_photos"] = [eb.upload_image(os.path.join(ROOT, f)) for f in c["写真ファイル"][:12]]
                                 except Exception as e:
                                     r.update(結論="エラー", 理由="写真を eBay に上げられない：" + err_text(e)[:300] if isinstance(e, EbayError) else str(e)[:300])
-                            if r["結論"] == "GO" and live and len(listed) < n_list and not listing_limit_stopped():
+                            if r["結論"] == "GO" and live and (cap_usd and price > cap_usd or (listing_limit_left() is not None and price > listing_limit_left())):
+                                r.update(結論="GO（後回し）", 理由="今は出さない：%s" % ("高額（$%.0f 超え・11/19 14:08 オーナー「今は高額商品出品しないで」）" % cap_usd if cap_usd and price > cap_usd else "今月の出品の上限の残り $%.2f を超える" % listing_limit_left()))
+                            if r["結論"] == "GO" and live and len(listed) < n_list and (not listing_limit_stopped() or (listing_limit_left() or 0) >= price):
                                 sku = next_sku(c, 0)
                                 try:
                                     pl = make_payload(c, kind, cat, cond, price, fp, ship, sku)
@@ -437,6 +445,8 @@ def main():
                                         lid, oid = list_one(eb, pl, item, offer)
                                         r.update(出品="eBay %s" % lid, SKU=sku)
                                         listed.append((sku, lid, pl["title"], price))
+                                        if listing_limit_left() is not None:
+                                            listing_limit_spend(price)
                                         gas_items.append({"itemId": lid, "offerId": oid, "sku": sku, "title": pl["title"], "price": price,
                                                           "cost": c["price"], "src": c["url"]})
                                         if sku not in ledger_skus:
@@ -450,9 +460,11 @@ def main():
                                         et = err_text(e)
                                         r.update(結論="エラー", 理由=et[:500], SKU=sku)
                                         errs.append((sku, et))
-                                        if is_limit_error(et):   # 月の上限：この回はもう出さない・次の月まで止める
+                                        if is_limit_error(et):   # 月の上限：残りの金額を記録。残りが最低の売値より少なければ、この回はもう出さない
                                             listing_limit_stop(et)
-                                            n_list = 0
+                                            r["結論"] = "GO（後回し）"
+                                            if (listing_limit_left() or 0) < min_usd:
+                                                n_list = 0
         r["t"] = now().timestamp()
         res.append(r)
         if str(c.get("id", "")).startswith("人:") and r["結論"] == "GASへ":
