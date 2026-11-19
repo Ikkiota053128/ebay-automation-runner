@@ -226,7 +226,7 @@ def next_sku(c, n):
     d = load_json(p, {"n": 0})
     d["n"] = int(d["n"]) + 1
     save_json(p, d)
-    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR", "Amazon（人）": "AZ"}.get(c["src"], "ST")
+    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR", "Amazon（人）": "AZ", "Yahoo!フリマ": "YF", "ヤフオク": "YA"}.get(c["src"], "ST")
     return "G%s-%06d" % (code, d["n"])
 
 
@@ -308,7 +308,8 @@ def main():
     done = {k: v for k, v in load_json(done_p, {}).items() if v.get("t", 0) >= now().timestamp() - 14 * 86400}
     back = load_json(os.path.join(ROOT, "data", "店の地引網", "送る待ち.json"), []) + \
         load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), []) + (gas_cands() if tt.get("GASにv667") else []) + \
-        load_json(os.path.join(ROOT, "data", "人の候補", "送る待ち.json"), [])   # メルカリ：人が集めた候補（教科書 第18章。プログラムはメルカリを開かない）
+        load_json(os.path.join(ROOT, "data", "人の候補", "送る待ち.json"), []) + \
+        load_json(os.path.join(ROOT, "data", "フリマ新着", "リスト外の候補.json"), [])   # 11/19 10:32 オーナー「1と使い回し3日」：型番リストに無いフリマの品   # メルカリ：人が集めた候補（教科書 第18章。プログラムはメルカリを開かない）
     # メルカリ（メール・ブラウザで集めた品）は、オーナーがGOを出した品だけ出品する（11/18 21:45 オーナー「メルカリはこれをやって」）
     import glob as _glob
     mgo_p = os.path.join(ROOT, "data", "判定", "メルカリGO待ち.json")
@@ -340,7 +341,7 @@ def main():
                 pre[why] += 1
                 continue
         best[k] = c
-    judge.comp_cache_load(os.path.join(ROOT, "data", "判定", "相場の写し.json"), tt.get("相場の使い回し_時間", 6))   # 11/19 8:52 オーナー「おすすめは1から」
+    judge.comp_cache_load(os.path.join(ROOT, "data", "判定", "相場の写し.json"), tt.get("相場の使い回し_時間", 6), tt.get("相場の使い回し_競合なし_時間"))   # 11/19 10:32 オーナー「使い回し3日」   # 11/19 8:52 オーナー「おすすめは1から」
     todo = list(best.values())[: int(tt.get("1回に判定する上限_件", 40))]
     n_list = int(tt.get("1回の出品の上限_件", 20))
     if live and not tt.get("カナリア済み"):

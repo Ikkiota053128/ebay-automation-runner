@@ -111,15 +111,17 @@ CAT_NAMES = {}   # eBay のカテゴリ番号 → 名前（競合の出品から
 _CC = {"path": None, "d": {}, "ttl": 0, "hit": 0, "miss": 0}
 
 
-def comp_cache_load(path, hours):
-    """相場（競合の値段）の使い回し：同じ型番・同じ状態・同じカテゴリの結果を hours 時間使う（教科書：6時間の使い回しで検索を減らす）"""
+def comp_cache_load(path, hours, none_hours=None):
+    """相場（競合の値段）の使い回し：同じ型番・同じ状態・同じカテゴリの結果を hours 時間使う。
+    競合が見つからなかった結果は none_hours 時間使う（11/19 10:32 オーナー「使い回し3日をやって」：GASと同じ 3日・競合なし7日）"""
     import json as _j, os as _o, time as _t
-    _CC.update(path=path, ttl=float(hours) * 3600, hit=0, miss=0)
+    _CC.update(path=path, ttl=float(hours) * 3600, ttl_none=float(none_hours if none_hours is not None else hours) * 3600, hit=0, miss=0)
     try:
         d = _j.load(open(path, encoding="utf-8")) if _o.path.exists(path) else {}
     except Exception:
         d = {}
-    _CC["d"] = {k: v for k, v in d.items() if v.get("t", 0) >= _t.time() - _CC["ttl"]}
+    now_ = _t.time()
+    _CC["d"] = {k: v for k, v in d.items() if v.get("t", 0) >= now_ - (_CC["ttl"] if v.get("p") else _CC["ttl_none"])}
 
 
 def comp_cache_save():

@@ -445,6 +445,35 @@ def notify(text):
     urllib.request.urlopen(req, timeout=20).read()  # 失敗したら例外 → その回は失敗（CLAUDE.md 8章）
 
 
+# 11/19 10:32 オーナー「1と使い回し3日をやって」：型番リストに無い品でも、知っているメーカー名と型番らしい文字（英字＋数字）があれば
+# 判定と出品（judge_list）へ直接送る（data/フリマ新着/リスト外の候補.json）。もうかるかどうかは eBay の相場で判定が決める。Yahoo!フリマ・ヤフオクだけ。
+EXTRA = []
+MAKERS = set()
+_TOK = re.compile(r"(?<![A-Z0-9])([A-Z]{1,6}-?[A-Z]{0,3}\d{1,5}[A-Z0-9\-]{0,8})(?![A-Z0-9])")
+_TOK_NG = re.compile(r"MM$|MMF|MAH$|^F\d|^ISO|^USB|^HDMI|^SDXC|^SDHC|^MARK|^MK\d|^VER|^NO\d|^NO-|^ED\d|^IS\d|^DC\d+V|^AC\d|^GB\d|^\w*GB$|^\w*TB$|^PS\d|^CR\d|^LR\d|^AA|^SR\d+SW|^\d")
+
+
+def guess_model(title):
+    """知っているメーカー名（型番リストのメーカー）と、型番らしい文字を商品名から読む。読めなければ None"""
+    t = re.sub(r"[【\[（(].*?[】\]）)]", " ", str(title)).upper().replace("－", "-").replace("‐", "-")
+    mk = next((m for m in sorted(MAKERS, key=len, reverse=True) if re.search(r"(?<![A-Z0-9])" + re.escape(m) + r"(?![A-Z0-9])", t)), None)
+    if not mk or re.search(r"リール|スプール|REEL", t):   # リールは型番が大きさの記号になりやすいので、リスト外では扱わない（17章）
+        return None
+    t = re.sub(r"#\s*[A-Z0-9\-]+", " ", t)   # 「#Y26J03527」のような管理番号は型番にしない
+    try:
+        from model_grow import size_code   # リールの大きさの記号（LT2000S-P など）は型番にしない（17章）
+    except Exception:
+        size_code = lambda a, b: False
+    for tok in _TOK.findall(t):
+        if size_code(mk, tok):
+            continue
+        k = re.sub(r"[^A-Z0-9]", "", tok)
+        if len(k) < 4 or not re.search(r"\d", k) or not re.search(r"[A-Z]", k) or _TOK_NG.search(tok) or k == re.sub(r"[^A-Z0-9]", "", mk):
+            continue
+        return mk, tok.strip("-")
+    return None
+
+
 def sweep(pol, kws, parser, path_of, models, seen, stat, cands, nomatch, t_end, stop_p, today, label):
     """1つのサイトを、検索語ごとに1ページずつ読む。断られたら、そのサイトは今日は止める。"""
     for kw in kws:
@@ -480,6 +509,12 @@ def sweep(pol, kws, parser, path_of, models, seen, stat, cands, nomatch, t_end, 
             m = match(it["title"], models)
             if not m:
                 nomatch.append(it["title"])
+                if label in ("Yahoo!フリマ", "ヤフオク") and it.get("price", 0) >= 3000 and not NG.search(it["title"]) \
+                        and not (ACC.search(it["title"]) and not ACC_OK.search(it["title"])):
+                    g = guess_model(it["title"])
+                    if g:
+                        stat["リスト外で型番が読めた"] = stat.get("リスト外で型番が読めた", 0) + 1
+                        EXTRA.append({**it, "id": "fl:" + it["id"], "メーカー": g[0], "型番": g[1], "src": label, "cap": 0, "ratio": 1.0, "t": time.time()})
                 continue
             stat["型番が合う"] += 1
             if NG.search(it["title"]):
@@ -555,6 +590,7 @@ def main():
         src = f"スナップショット（{len(models)}型番）"
     if not words:
         words = json.load(open(os.path.join(ROOT, "data", "まとめ検索語.json"), encoding="utf-8"))
+    MAKERS.update(str(m.get("maker", "")).strip().upper() for m in models if len(str(m.get("maker", "")).strip()) >= 3)
     # 検索語は回ごとに順に回す（全部を毎回読むと回数が多すぎるので、1回 N 語ずつ）
     cur_p = os.path.join(ROOT, "data", "フリマ新着", "順番.json")
     cur = json.load(open(cur_p, encoding="utf-8")).get("次", 0) if os.path.exists(cur_p) else 0
@@ -638,6 +674,15 @@ def main():
     else:
         json.dump({"次": (cur + done_n) % max(len(words), 1)}, open(cur_p, "w", encoding="utf-8"))
     json.dump(sorted(seen)[-40000:], open(seen_p, "w", encoding="utf-8"))
+    if EXTRA and not dry:   # リスト外の候補 → 判定と出品へ（3日で捨てる・判定済みは入れない・上限600品）
+        xp = os.path.join(ROOT, "data", "フリマ新着", "リスト外の候補.json")
+        done_j = json.load(open(os.path.join(ROOT, "data", "判定", "判定済み.json"), encoding="utf-8")) if os.path.exists(os.path.join(ROOT, "data", "判定", "判定済み.json")) else {}
+        old_x = json.load(open(xp, encoding="utf-8")) if os.path.exists(xp) else []
+        q = {c["id"]: c for c in old_x if c.get("t", 0) >= time.time() - 3 * 86400}
+        for c in EXTRA:
+            if c["id"] not in done_j:
+                q.setdefault(c["id"], c)
+        json.dump(sorted(q.values(), key=lambda c: -c["t"])[: int(cfg.get("リスト外の候補の上限_件", 600))], open(xp, "w", encoding="utf-8"), ensure_ascii=False)
     # 網を育てる：リストにない品の名前をツールへ（知らない型番を追加候補に。出品はしない）
     ml = ""
     if nomatch:   # 知らないブランドの候補（brand_scout.py・教科書 第3章②）のために、リストにない品の名前を日ごとに残す
