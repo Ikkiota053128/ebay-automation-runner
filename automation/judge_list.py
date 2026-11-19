@@ -323,11 +323,22 @@ def main():
         if v.get("商品") in approved:
             back.append(dict(v["候補"], _approved=True))
     # 同じ型番は一番安い1品。判定済み・出品中の型番は飛ばす
-    best = {}
+    best, pre = {}, collections.Counter()
     for c in sorted(back, key=lambda c: (not c.get("_approved"), c["price"])):
         k = mkey(c["型番"])
         if (c["id"] in done and not c.get("_approved")) or k in best or len(k) < 4 or not re.search(r"\d", k):
             continue
+        # 11/19 9:11 オーナー「やって」：付属品・出品中の型番は、判定の枠（1回の上限）を使わずに先に外す（検索も使わない）
+        if not c.get("_approved"):
+            why = ""
+            if judge.is_acc_ja(c["title"], c["型番"]):
+                why = "付属品・部品（本体ではない）"
+            elif any(same_model(k, m) for m in live_models):
+                why = "同じ型番がもう出品中"
+            if why:
+                done[c["id"]] = {"t": now().timestamp(), "結論": "見送り", "理由": why + "（先に外した）"}
+                pre[why] += 1
+                continue
         best[k] = c
     judge.comp_cache_load(os.path.join(ROOT, "data", "判定", "相場の写し.json"), tt.get("相場の使い回し_時間", 6))   # 11/19 8:52 オーナー「おすすめは1から」
     todo = list(best.values())[: int(tt.get("1回に判定する上限_件", 40))]
@@ -493,6 +504,8 @@ def main():
     msg = ["【判定と出品】%s %s：%d品を判定（GitHubだけ）" % (jst(), "本番" if live else "影の運転", len(res)),
            "・".join("%s %d" % kv for kv in cnt.most_common())]
     msg.append("相場の使い回し：%d回・eBayの検索 %d回" % (ch, cm))
+    if pre:
+        msg.append("判定の前に外した：" + "・".join("%s %d" % kv for kv in pre.most_common()))
     why = collections.Counter(x.get("理由", "") for x in res if x["結論"] in ("見送り", "GASへ"))
     if why:
         msg.append("理由：" + "・".join("%s %d" % (k[:30], v) for k, v in why.most_common(5)))

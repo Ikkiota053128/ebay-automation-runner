@@ -90,6 +90,9 @@ def keep(it, m):
         return "ジャンク・付属品の言葉"
     if ACC.search(t) and not ACC_OK.search(t):
         return "付属品"
+    import judge   # 11/19 9:11 オーナー「やって」：判定と同じ付属品の見分けで、地引網の段階で外す
+    if judge.is_acc_ja(t, m["model"]):
+        return "付属品・部品（本体ではない）"
     hit = match(t, [m])
     if not hit:
         return "型番が商品名に無い"
@@ -141,6 +144,15 @@ def main():
         write_run(NAME, False, 0, 1)
         return 1
     models = [m for m in compile_models(d["models"]) if not m["listed"]]
+    # 11/19 9:11 オーナー「やって」：台帳で出品中の型番も見ない（GAS の「出品中」の印が古いことがあるため）
+    try:
+        from common import read_ledger
+        from price_adjust import model_of
+        from bulk_list import mkey, same_model
+        lm = [x for x in (mkey(model_of(r.get("タイトル"))) for r in read_ledger() if r.get("状態") == "出品中" and r.get("タイトル")) if x]
+        models = [m for m in models if not any(same_model(mkey(m["model"]), x) for x in lm)]
+    except Exception as e:
+        print("台帳の出品中の型番を読めなかった：", type(e).__name__)
     per = int(tt.get("1回に見る型番の数", 120))
     cur_p = os.path.join(ROOT, "data", "店の地引網", "順番.json")
     cur = load_json(cur_p, {"i": 0})
