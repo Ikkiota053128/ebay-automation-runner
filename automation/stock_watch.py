@@ -32,22 +32,13 @@ def fetch(url):
         return None, str(e)[:120]
 
 
-def rakuten_stock(url):
-    """楽天のページは GitHub から読めない（アクセスを断られる）ので、楽天の公式API（商品コードで探す・売り切れも含む）で見る。
-    返事：(ある=True／ない=False／読めなかった=None, 理由)。中継（RAKUTEN_RELAY_URL）を通す（アプリが許可したIPだけ）"""
-    m = re.match(r"https?://item\.rakuten\.co\.jp/([^/?#]+)/([^/?#]+)", url or "")
-    rid, acc = os.environ.get("RAKUTEN_APP_ID", "").strip(), os.environ.get("RAKUTEN_ACCESS_KEY", "").strip()
-    relay, tok = os.environ.get("RAKUTEN_RELAY_URL", "").strip(), os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()
-    if not m or not (rid and acc and relay):
-        return "skip", ""
-    q = {"format": "json", "formatVersion": 2, "applicationId": rid, "itemCode": "%s:%s" % (m.group(1), m.group(2)), "availability": 0, "hits": 1}
+def _rk_call(q, relay, acc, tok):
+    """楽天のAPIを中継で1回呼ぶ。返事：(json か None, エラーの文)"""
     req = urllib.request.Request(relay.rstrip("/") + "/search?" + urllib.parse.urlencode(q),
                                  headers={"User-Agent": UA, "accessKey": acc, "X-Relay-Token": tok})
-    j = None
     for k in range(3):   # 楽天のAPIは GAS・店の地引網と同じ鍵 → 429 なら少し待ってやり直す
         try:
-            j = json.loads(urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace"))
-            break
+            return json.loads(urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")), ""
         except urllib.error.HTTPError as e:
             if e.code == 429 and k < 2:
                 time.sleep(6 * (k + 1))
@@ -59,14 +50,61 @@ def rakuten_stock(url):
             return None, "楽天API HTTP %s %s" % (e.code, body)
         except Exception as e:
             return None, "楽天API %s" % str(e)[:80]
-    if j is None:
-        return None, "楽天API 返事なし"
-    if False:
-        pass
-    items = j.get("items") or j.get("Items") or []
-    if not items:
-        return None, "楽天APIで商品が見つからない（消えた可能性）"
-    it = items[0].get("Item", items[0])
+    return None, "楽天API 返事なし"
+
+
+def _rk_norm(u):
+    m = re.match(r"https?://item\.rakuten\.co\.jp/([^/?#]+)/([^/?#]+)", str(u or ""))
+    return (m.group(1).lower(), m.group(2).lower()) if m else None
+
+
+def rakuten_stock(url, title=""):
+    """楽天のページは GitHub から読めない（アクセスを断られる）ので、楽天の公式APIで見る。中継（RAKUTEN_RELAY_URL）を通す（アプリが許可したIPだけ）。
+    11/19 11:10 オーナー「1と2をやって」：URLの後ろの文字は楽天の商品コードと違う店が多い（「商品コードの形が正しくない」）。
+    ① 商品コード（店:URLの文字）で探す → ② だめなら「店のコード＋型番」で探して、URLが同じ品を見つける（売り切れも含めて探す）。
+    返事：(ある=True／ない=False／読めなかった=None, 理由)"""
+    key = _rk_norm(url)
+    rid, acc = os.environ.get("RAKUTEN_APP_ID", "").strip(), os.environ.get("RAKUTEN_ACCESS_KEY", "").strip()
+    relay, tok = os.environ.get("RAKUTEN_RELAY_URL", "").strip(), os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()
+    if not key or not (rid and acc and relay):
+        return "skip", ""
+    base = {"format": "json", "formatVersion": 2, "applicationId": rid, "availability": 0}
+
+    def pick(j):
+        for it in (j or {}).get("items") or (j or {}).get("Items") or []:
+            it = it.get("Item", it)
+            if _rk_norm(it.get("itemUrl")) == key:
+                return it
+        return None
+
+    j, err = _rk_call(dict(base, itemCode="%s:%s" % key, hits=1), relay, acc, tok)
+    it = pick(j) or (((j or {}).get("items") or (j or {}).get("Items") or [None])[0] if j else None)
+    if it:
+        it = it.get("Item", it)
+    tried = ["商品コード：" + (err[:60] if err else "見つからない")]
+    if not it:   # ② 店のコード＋型番（型番が読めなければ店のコードだけ・新しい順に1ページ）
+        try:
+            from price_adjust import model_of
+            md = model_of(title) or ""
+        except Exception:
+            md = ""
+        plans = [dict(base, shopCode=key[0], keyword=md, hits=30)] if md and len(md) >= 3 else []
+        plans += [dict(base, shopCode=key[0], hits=30, sort="-updateTimestamp", page=1)]   # 時間の上限（30分）に収まるように、店の新着は1ページだけ
+        for q in plans:
+            time.sleep(1.1)
+            j, err = _rk_call(q, relay, acc, tok)
+            if err:
+                tried.append(("店＋型番：" if "keyword" in q else "店の新着：") + err[:60])
+                if "HTTP 4" in err and "429" not in err and "keyword" not in q:
+                    break
+                continue
+            it = pick(j)
+            if it:
+                break
+        if not it:
+            tried.append("店＋型番・店の新着でも見つからない")
+    if not it:
+        return None, "楽天APIで商品が見つからない（消えた可能性）／" + "・".join(tried)[:120]
     return (True, "在庫あり（楽天API）") if int(it.get("availability") or 0) == 1 else (False, "売り切れ（楽天API）")
 
 
@@ -132,7 +170,7 @@ def main():
         if r["SKU"] in human:
             ok, why = human[r["SKU"]], "あなたが見た"
         else:
-            ok, why = rakuten_stock(r["仕入元URL"])
+            ok, why = rakuten_stock(r["仕入元URL"], r.get("タイトル", ""))
         if ok == "skip":
             code, html = fetch(r["仕入元URL"])
             ok, why = judge(code, html)
@@ -144,7 +182,10 @@ def main():
             out["読めない"].append(r["SKU"])
             why_unk[why[:60]] = why_unk.get(why[:60], 0) + 1
             if unk[r["SKU"]] == 3:
-                alerts.append("読めない状態が3回続いた %s（%s）" % (r["SKU"], why))
+                if "見つからない" in why and "rakuten" in str(r.get("仕入元URL")):   # 11/19 11:10 オーナー「1と2をやって」：消えた疑い → 在庫0の候補として知らせる（自動では0にしない）
+                    alerts.append("楽天で3回続けて見つからない（消えた疑い・在庫0の候補）%s %s" % (r["SKU"], r.get("仕入元URL")))
+                else:
+                    alerts.append("読めない状態が3回続いた %s（%s）" % (r["SKU"], why))
         else:
             unk.pop(r["SKU"], None)
             out["ある" if ok else "ない"].append(r["SKU"])
