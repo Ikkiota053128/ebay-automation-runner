@@ -430,7 +430,10 @@ def main():
                                 except Exception as e:
                                     r.update(結論="エラー", 理由="写真を eBay に上げられない：" + err_text(e)[:300] if isinstance(e, EbayError) else str(e)[:300])
                             if r["結論"] == "GO" and live and (cap_usd and price > cap_usd or (listing_limit_left() is not None and price > listing_limit_left())):
-                                r.update(結論="GO（後回し）", 理由="今は出さない：%s" % ("高額（$%.0f 超え・11/19 14:08 オーナー「今は高額商品出品しないで」）" % cap_usd if cap_usd and price > cap_usd else "今月の出品の上限の残り $%.2f を超える" % listing_limit_left()))
+                                if cap_usd and price > cap_usd:   # 11/20 7:44 オーナー「今後は1000以上の商品出品しないで」：上限を超える品は出さない（見送り）
+                                    r.update(結論="見送り", 理由="売値 $%.2f が出す上限 $%.0f を超える（11/20 7:44 オーナー「今後は1000以上の商品出品しないで」）" % (price, cap_usd))
+                                else:
+                                    r.update(結論="GO（後回し）", 理由="今は出さない：今月の出品の上限の残り $%.2f を超える" % listing_limit_left())
                             if r["結論"] == "GO" and live and len(listed) < n_list and (not listing_limit_stopped() or (listing_limit_left() or 0) >= price):
                                 sku = next_sku(c, 0)
                                 try:
