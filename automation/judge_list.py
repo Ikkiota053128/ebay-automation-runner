@@ -278,7 +278,8 @@ def main():
         wd_note = ""
     ls = listing_limit_stopped()
     left = listing_limit_left()
-    cap_usd = float(tt.get("今出す売値の上限_ドル", 0) or 0)   # 11/19 14:08 オーナー「今は高額商品出品しないで」（0 なら上限なし）
+    cap_usd = float(tt.get("今出す売値の上限_ドル", 0) or 0)   # 今は出さない（後回し）線。11/20 7:46 オーナー「今は高額商品出品控えて」（0 なら上限なし）
+    never_usd = float(tt.get("出さない売値の上限_ドル", 0) or 0)   # これを超える品は出さない（見送り）。11/20 7:44 オーナー「今後は1000以上の商品出品しないで」
     min_usd = float(tt.get("上限の残りで出す最低の売値_ドル", 60))
     if ls and live and left is not None and left >= min_usd:
         print("eBay の出品の上限：今月の残り $%.2f に収まる品だけ出す（11/19 14:08 オーナー「出品枠額がなくなるまで出品して」）" % left)
@@ -429,11 +430,10 @@ def main():
                                     c["_photos"] = [eb.upload_image(os.path.join(ROOT, f)) for f in c["写真ファイル"][:12]]
                                 except Exception as e:
                                     r.update(結論="エラー", 理由="写真を eBay に上げられない：" + err_text(e)[:300] if isinstance(e, EbayError) else str(e)[:300])
+                            if r["結論"] == "GO" and live and never_usd and price > never_usd:
+                                r.update(結論="見送り", 理由="売値 $%.2f が出す上限 $%.0f を超える（11/20 7:44 オーナー「今後は1000以上の商品出品しないで」）" % (price, never_usd))
                             if r["結論"] == "GO" and live and (cap_usd and price > cap_usd or (listing_limit_left() is not None and price > listing_limit_left())):
-                                if cap_usd and price > cap_usd:   # 11/20 7:44 オーナー「今後は1000以上の商品出品しないで」：上限を超える品は出さない（見送り）
-                                    r.update(結論="見送り", 理由="売値 $%.2f が出す上限 $%.0f を超える（11/20 7:44 オーナー「今後は1000以上の商品出品しないで」）" % (price, cap_usd))
-                                else:
-                                    r.update(結論="GO（後回し）", 理由="今は出さない：今月の出品の上限の残り $%.2f を超える" % listing_limit_left())
+                                r.update(結論="GO（後回し）", 理由="今は出さない：%s" % ("高額（$%.0f 超え・11/20 7:46 オーナー「今は高額商品出品控えて」）" % cap_usd if cap_usd and price > cap_usd else "今月の出品の上限の残り $%.2f を超える" % listing_limit_left()))
                             if r["結論"] == "GO" and live and len(listed) < n_list and (not listing_limit_stopped() or (listing_limit_left() or 0) >= price):
                                 sku = next_sku(c, 0)
                                 try:
