@@ -214,7 +214,14 @@ def main():
     gdone = load_json(os.path.join(ROOT, "data", "判定", "判定済み.json"), {})
     for k in [k for k in back if k in gdone]:
         back.pop(k)
-    queue = sorted(back.values(), key=lambda c: c["ratio"])[: int(tt.get("送る待ちの上限_件", 1500))]
+    allq = sorted(back.values(), key=lambda c: c["ratio"])
+    queue = allq[: int(tt.get("送る待ちの上限_件", 1500))]
+    # 11/19 12:36 オーナー「1・2・4でお願い」：列に入りきらなかった品は「見た」から外して、次の回にまた拾えるようにする（捨てない）
+    over = {c["id"] for c in allq[len(queue):]}
+    if over:
+        for k in over:
+            seen.pop(k, None)
+        save_json(seen_p, seen)
     n_send = int(tt.get("1回に送る上限_件", 30))
     if live and not tt.get("カナリア済み"):
         n_send = min(n_send, int(tt.get("カナリアの件数", 20)))
