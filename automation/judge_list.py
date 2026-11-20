@@ -123,6 +123,16 @@ def more_photos(c):
             from flea_sweep import IMG_RX
             code, html = fetch(c["url"])
             if code == 200:
+                # 11/20 9:41 オーナー「A→Bでお願い」：Yahoo!フリマ・ヤフオクの写真は、画像の中継（auc-pctr など）や JSON の中（\u002F）にあって
+                # 今までの読み方では拾えなかった。中継の後ろの元の写真のアドレスも拾う
+                html = html.replace("\\u002F", "/").replace("\\/", "/")
+                for m in re.findall(r"(?:https?:)?//?(?:[a-z0-9\-]+\.c\.yimg\.jp/(?:i/)?)?(auctions\.c\.yimg\.jp/images\.auctions\.yahoo\.co\.jp/image/[^\"'?\s<>]+?\.(?:jpe?g|png))", html, re.I):
+                    u = "https://" + m
+                    if u not in ph:
+                        ph.append(u)
+                for u in re.findall(r"https://[a-z0-9\-\.]*paypayfleamarket[a-z0-9\-\.]*\.(?:yimg\.jp|yahoo\.co\.jp)/[^\"'\s<>]+?\.(?:jpe?g|png|webp)", html, re.I):
+                    if not re.search(r"icon|logo|banner|avatar|profile|noimage|blank", u, re.I) and u not in ph:
+                        ph.append(u)
                 p = ld_product(html) or {}
                 ho = [u for u in re.findall(r"https://[a-z0-9\-]+\.imageflux\.jp/[^\"'\s)]+\.(?:jpe?g|png|webp)[^\"'\s)]*", html)
                       if not re.search(r"blankimg|noimage|icon|logo|banner|/portal/", u) and int((re.search(r"w=(\d+)", u) or [0, 9999])[1]) >= 600]
@@ -392,8 +402,8 @@ def main():
                 cat = cc[0][0] if cc and cc[0][1] * 2 >= len(cats) else ""
                 kind = kinds.get(cat) or auto_kind(cat, kinds)
                 r.update(競合の数=len(act), 競合=act[:5], カテゴリ=cat)
-                if len(act) < 2:
-                    r.update(結論="GASへ", 理由="同じ型番の競合が2件未満")
+                if len(act) < int(tt.get("競合の最低件数", 1)):   # 11/20 9:41 オーナー「A→Bでお願い」：競合1件でも、その値段とフロアで値付けする（前は2件未満を GAS へ）
+                    r.update(結論="見送り", 理由="eBayに同じ型番の競合が無い（相場と比べられない）")
                 elif c["price"] > float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * statistics.median(act) * 152:
                     r.update(結論="見送り", 理由="仕入値が相場の中央値の%d割を超える（教科書 第21章）" % round(float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * 10))
                 elif c["price"] < 0.2 * act[0] * 152:
