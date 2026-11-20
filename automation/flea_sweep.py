@@ -474,6 +474,30 @@ def guess_model(title):
     return None
 
 
+DESC_TODO = []   # 11/20 9:48 オーナー「1をやって」：メーカー名はあるが商品名に型番が無い品 → 商品ページの説明文から型番を読む
+_SPEC = re.compile(r"(?:型番|品番|型式|形式|モデル名?|MODEL|Model|model|品名)\s*[:：]?\s*([A-Za-z]{1,6}[A-Za-z0-9]*[-‐－ ]?[A-Za-z0-9]*\d[A-Za-z0-9\-‐－]{0,10})")
+
+
+def maker_of(title):
+    t = re.sub(r"[【\[（(].*?[】\]）)]", " ", str(title)).upper()
+    if re.search(r"リール|スプール|REEL", t):
+        return None
+    return next((m for m in sorted(MAKERS, key=len, reverse=True) if re.search(r"(?<![A-Z0-9])" + re.escape(m) + r"(?![A-Z0-9])", t)), None)
+
+
+def model_from_page(html, mk, title):
+    """商品ページの説明文から型番を読む。「型番：」「品番」などの書き方を先に見て、無ければ説明文の頭のほうの型番らしい文字"""
+    txt = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", html)
+    m = re.search(r'"description"\s*:\s*"([^"]{10,4000})"', html)
+    body = (m.group(1) if m else "") + " " + re.sub(r"<[^>]+>", " ", txt)
+    body = body.replace("\\n", " ").replace("\\u002F", "/")
+    for x in _SPEC.findall(body):
+        g = guess_model("%s %s" % (mk, x.replace(" ", "-")))
+        if g:
+            return g
+    return guess_model("%s %s" % (mk, (m.group(1) if m else "")[:800]))
+
+
 def sweep(pol, kws, parser, path_of, models, seen, stat, cands, nomatch, t_end, stop_p, today, label):
     """1つのサイトを、検索語ごとに1ページずつ読む。断られたら、そのサイトは今日は止める。"""
     for kw in kws:
@@ -515,6 +539,8 @@ def sweep(pol, kws, parser, path_of, models, seen, stat, cands, nomatch, t_end, 
                     if g:
                         stat["リスト外で型番が読めた"] = stat.get("リスト外で型番が読めた", 0) + 1
                         EXTRA.append({**it, "id": "fl:" + it["id"], "メーカー": g[0], "型番": g[1], "src": label, "cap": 0, "ratio": 1.0, "t": time.time()})
+                    elif maker_of(it["title"]):
+                        DESC_TODO.append((it, label, maker_of(it["title"])))
                 continue
             stat["型番が合う"] += 1
             if NG.search(it["title"]):
@@ -674,6 +700,22 @@ def main():
     else:
         json.dump({"次": (cur + done_n) % max(len(words), 1)}, open(cur_p, "w", encoding="utf-8"))
     json.dump(sorted(seen)[-40000:], open(seen_p, "w", encoding="utf-8"))
+    # 11/20 9:48 オーナー「1をやって」：商品名に型番が無い品は、商品ページの説明文から型番を読む（1回の上限・4秒以上あける）
+    if DESC_TODO:
+        pols, n_lim = {}, int(cfg.get("説明文を読む上限_件", 40))
+        for it, label, mk in sorted(DESC_TODO, key=lambda x: -x[0].get("price", 0))[:n_lim]:
+            if time.time() > t_end + 300:
+                break
+            host = urllib.parse.urlparse(it["url"]).netloc
+            pol = pols.get(host) or pols.setdefault(host, Polite(max(gap, 4), host))
+            code, html = pol.get(urllib.parse.urlparse(it["url"]).path)
+            stat["説明文を読んだ"] = stat.get("説明文を読んだ", 0) + 1
+            if code != 200:
+                continue
+            g = model_from_page(html, mk, it["title"])
+            if g:
+                stat["説明文で型番が読めた"] = stat.get("説明文で型番が読めた", 0) + 1
+                EXTRA.append({**it, "id": "fl:" + it["id"], "メーカー": g[0], "型番": g[1], "src": label, "cap": 0, "ratio": 1.0, "t": time.time(), "型番の出どころ": "説明文"})
     if EXTRA and not dry:   # リスト外の候補 → 判定と出品へ（3日で捨てる・判定済みは入れない・上限600品）
         xp = os.path.join(ROOT, "data", "フリマ新着", "リスト外の候補.json")
         done_j = json.load(open(os.path.join(ROOT, "data", "判定", "判定済み.json"), encoding="utf-8")) if os.path.exists(os.path.join(ROOT, "data", "判定", "判定済み.json")) else {}
