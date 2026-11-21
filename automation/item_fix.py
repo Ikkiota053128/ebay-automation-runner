@@ -141,6 +141,11 @@ def main():
         p["title"] = new_t
         asp.update(add)
         body = {k: v for k, v in it.items() if k in ("product", "condition", "conditionDescription", "conditionDescriptors", "availability", "packageWeightAndSize", "locale")}
+        pw = body.get("packageWeightAndSize") or {}
+        if pw and not float((pw.get("weight") or {}).get("value") or 0) > 0:   # 重さ0は保存で断られる（25709）ので、重さの欄だけ外す
+            pw.pop("weight", None)
+            if not pw.get("dimensions") or not all(float(pw["dimensions"].get(k) or 0) > 0 for k in ("length", "width", "height")):
+                body.pop("packageWeightAndSize", None)
         try:
             eb.call("PUT", "/sell/inventory/v1/inventory_item/" + urllib.parse.quote(sku, safe=""), body, headers=CL)
             chk = eb.inventory_item(sku).get("product") or {}
