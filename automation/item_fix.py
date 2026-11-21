@@ -120,6 +120,20 @@ def main():
         cfg["項目"] = aspects
         cfg.pop("腕時計の項目を作る", None)
         save_json(P, cfg)
+    if cfg.get("全品のMPN"):   # 11/21 18:47 オーナー「1 → 2 → 3」：型番（Model）があって MPN が空いている品に、同じ型番を MPN として足す
+        for r in rows:
+            sku = r.get("SKU", "")
+            if r.get("状態") != "出品中" or sku.startswith("STK-") or sku in aspects:
+                continue
+            try:
+                pa = (eb.inventory_item(sku).get("product") or {}).get("aspects") or {}
+            except EbayError:
+                continue
+            if pa.get("Model") and not pa.get("MPN"):
+                aspects[sku] = {"MPN": pa["Model"][:1]}
+        cfg["項目"] = aspects
+        cfg.pop("全品のMPN", None)
+        save_json(P, cfg)
     out = {"時刻": jst(), "本番": live, "直した": [], "失敗": [], "案": {}}
     for sku in list(dict.fromkeys(list(titles) + list(aspects))):
         if done.get(sku, {}).get("失敗", 0) >= 2:
