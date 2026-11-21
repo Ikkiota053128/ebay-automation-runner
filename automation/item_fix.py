@@ -135,7 +135,12 @@ def main():
         cfg.pop("全品のMPN", None)
         save_json(P, cfg)
     out = {"時刻": jst(), "本番": live, "直した": [], "失敗": [], "案": {}}
+    import time as _t
+    t_end = _t.time() + 60 * float(cfg.get("時間の上限_分", 22))   # workflow の30分で切られないように、時間で区切って次の回へ
     for sku in list(dict.fromkeys(list(titles) + list(aspects))):
+        if _t.time() > t_end:
+            out["時間切れ"] = True
+            break
         if done.get(sku, {}).get("失敗", 0) >= 2:
             out["失敗"].append({"SKU": sku, "エラー": "2回続けて失敗したのでくり返さない"})
             continue
