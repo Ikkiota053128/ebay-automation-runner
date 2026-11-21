@@ -53,7 +53,7 @@ def main():
     have |= {key(a.get("model")) for a in add}
     res, out = [], []
     for mk, md in CANDS:
-        if key(md) in have:
+        if key(md) in have or len(key(md)) < 4:   # 判定は4文字以上の型番だけ使う
             res.append({"型番": md, "結果": "もうリストにある"})
             continue
         try:
