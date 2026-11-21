@@ -389,6 +389,13 @@ def main():
     mgo = {k: v for k, v in load_json(mgo_p, {}).items() if v.get("t", 0) >= now().timestamp() - 7 * 86400}
     mauto_p = os.path.join(ROOT, "data", "判定", "メルカリの自動出品.json")
     mauto = load_json(mauto_p, {})
+    # 11/21 21:34 オーナー「在庫管理もしっかりして！」：出品中のメルカリの品が、1日に見回れる数（時刻表 メルカリの見回り_1日）に届いたら、
+    # メルカリの自動出品を止める（見回れない品を増やさない）。止めた品は今までどおり「GO確認待ち」。
+    m_live = sum(1 for r in led if r.get("状態") == "出品中" and "mercari.com/item/" in str(r.get("仕入元URL", "")))
+    m_cap = int(tt.get("メルカリの見回り_1日", 180))
+    m_day_cap = min(int(tt.get("メルカリの自動出品_1日", 5)), mauto.get(now().strftime("%Y-%m-%d"), 0) + max(0, m_cap - m_live))   # 空きの分だけ
+    if m_live >= m_cap:
+        print("メルカリ：出品中 %d 品が見回りの上限 %d に届いたので、自動出品を止める" % (m_live, m_cap))
     approved, ans_files = set(), []
     for f in sorted(_glob.glob(os.path.join(ROOT, "data", "答え", "*.json"))):
         a = load_json(f, {})
@@ -397,7 +404,7 @@ def main():
             ans_files.append(f)
     for k, v in mgo.items():
         # 11/21 19:04 オーナー「…私のショップもやって」：GO確認待ちのうち、集めてから24時間以内の品も自動で出す（1日の上限の中）
-        recent = v.get("t", 0) >= now().timestamp() - 86400 and mauto.get(now().strftime("%Y-%m-%d"), 0) < int(tt.get("メルカリの自動出品_1日", 5))
+        recent = v.get("t", 0) >= now().timestamp() - 86400 and mauto.get(now().strftime("%Y-%m-%d"), 0) < m_day_cap
         if v.get("商品") in approved or recent:
             if recent and v.get("商品") not in approved:
                 mauto[now().strftime("%Y-%m-%d")] = mauto.get(now().strftime("%Y-%m-%d"), 0) + 1
@@ -497,7 +504,7 @@ def main():
                             # 上限を超えた品だけ、今までどおり「GO確認待ち」
                             mday = now().strftime("%Y-%m-%d")
                             if mid and not str(c["id"]).startswith("人:") and not c.get("_approved") and \
-                                    mauto.get(mday, 0) < int(tt.get("メルカリの自動出品_1日", 5)):
+                                    mauto.get(mday, 0) < m_day_cap:
                                 c["_approved"] = True
                                 mauto[mday] = mauto.get(mday, 0) + 1
                             if mid and not str(c["id"]).startswith("人:") and not c.get("_approved"):
