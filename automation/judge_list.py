@@ -165,9 +165,21 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
     cw = "New" if cond < 3000 else "Used"
     title = re.sub(r"\s+", " ", "%s %s %s %s From Japan" % (brand, model, kind["言葉"], cw)).strip()[:80]
     html = open(os.path.join(HERE, "desc_template.html"), encoding="utf-8").read()
+    # 11/21 13:07 オーナー「1と3」：仕入れ先の状態の説明を読んで英語の「Condition notes」にし、eBay の状態の説明の欄にも入れる
+    try:
+        import cond_note
+        cn = cond_note.for_item(c)
+    except Exception:
+        cn = {"notes": [], "func": "", "box": ""}
+    func = "New item." if cond < 3000 else (cn["func"] or "Not tested. Please check the photos.")
+    nts = [] if cond < 3000 else cn["notes"]
+    def esc(x):
+        return str(x).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     html = (html.replace("{{TITLE}}", title).replace("{{BRAND}}", brand).replace("{{MODEL}}", model)
             .replace("{{COND}}", "New" if cond < 3000 else "Used")
-            .replace("{{FUNC}}", "New item." if cond < 3000 else "Not tested. Please check the photos."))
+            .replace("{{FUNC}}", esc(func))
+            .replace("{{NOTES}}", esc("; ".join(nts)) if nts else "Please check the photos.")
+            .replace("{{INCLUDED}}", esc(cn["box"]) if cn.get("box") else "Only the items in the photos"))
     asp = [["Brand", brand], ["Model", model]] + [[k, "Does not apply"] for k in kind["項目"]] + \
           [["Shipping Method", "FedEx International Connect Plus (tracked)"]]
     w, (l, wd, h) = kind["重さ_g"], sorted([float(x) for x in kind["箱"].split("x")], reverse=True)
@@ -189,7 +201,10 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
                      "dutyRate": kind.get("関税率", 0.15), "fixed": 0, "dom": c.get("dom", 2000), "fx": 152,
                      "note": "GitHubの判定（%s）" % kind["名前"]}}
     if cond >= 3000:
-        pl["conditionDescription"] = COND_DESC
+        cd = "Used. " + (" ".join(x.rstrip(".") + "." for x in nts) + " " if nts else "") + \
+             (cn["func"] if cn["func"] else "NOT TESTED - we have not tested this item and its function is not confirmed.") + \
+             (" Included: %s." % cn["box"] if cn.get("box") else "") + " Please judge from the photos."
+        pl["conditionDescription"] = cd[:1000]
     if fp >= price:   # フロアの値段で出すときは、値下げの交渉を受けない
         pl["bestOffer"] = {"bestOfferEnabled": False}
     return pl
