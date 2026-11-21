@@ -20,7 +20,17 @@ for fp in pj.get("fulfillmentPolicies", []):
                          "アメリカ（国内）の配送": dom, "国際の配送": intl,
                          "行き先": [x.get("regionName") for x in stl.get("regionIncluded") or []],
                          "除外": [x.get("regionName") for x in stl.get("regionExcluded") or []]})
+import re
+def get_item(lid):
+    x = eb.trading("GetItem", "<ItemID>%s</ItemID><DetailLevel>ReturnAll</DetailLevel>" % lid)
+    f = lambda t: re.findall(r"<%s>([^<]*)</%s>" % (t, t), x)
+    dom = re.findall(r"<ShippingServiceOptions>[\s\S]*?<ShippingService>([^<]*)</ShippingService>", x)
+    return {"状態": (f("ListingStatus") or ["?"])[0], "配送ポリシー": (re.findall(r"<ShippingProfileID>([^<]*)</ShippingProfileID>", x) or [""])[0],
+            "アメリカ向けの配送": dom, "行き先": f("ShipToLocations"), "除外にアメリカ": any(e in ("US", "United States") for e in f("ExcludeShipToLocation")),
+            "エラー": f("ShortMessage")[:1]}
 use = collections.Counter()
+detail = collections.Counter()
+odd = []
 for r in read_ledger():
     if r.get("状態") != "出品中" or r.get("SKU", "").startswith("STK-"):
         continue
@@ -28,8 +38,17 @@ for r in read_ledger():
         offs = eb.offers_of(r["SKU"])
         pid = next((str((o.get("listingPolicies") or {}).get("fulfillmentPolicyId")) for o in offs if o.get("status") == "PUBLISHED"), None)
         use[pid or "公開中のオファー無し"] += 1
+        if pid in (None, "None") and r.get("eBayの出品ID"):   # 11/21 13:21 オーナー「はい」：ポリシーが読めない品は GetItem で1品ずつ見る
+            gi = get_item(r["eBayの出品ID"])
+            us_ok = bool(gi["アメリカ向けの配送"]) and not gi["除外にアメリカ"]
+            k = "%s・%s・ポリシー%s" % (gi["状態"], "アメリカOK" if us_ok else "アメリカ×", gi["配送ポリシー"] or "なし")
+            detail[k] += 1
+            if not us_ok or gi["状態"] != "Active":
+                odd.append({"SKU": r["SKU"], "出品ID": r["eBayの出品ID"], **gi})
     except EbayError as e:
         out["読めなかった"].append(r["SKU"])
 out["使っている数"] = dict(use.most_common())
+out["ポリシーが読めない品の中身"] = dict(detail.most_common())
+out["気になる品"] = odd[:300]
 save_json(os.path.join(ROOT, "data", "判定", "発送先の確認.json"), out)
 print("ポリシー", len(out["ポリシー"]), "／出品中の品", sum(use.values()), "／読めなかった", len(out["読めなかった"]))
