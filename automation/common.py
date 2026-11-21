@@ -419,6 +419,15 @@ def is_target(row):
 # ---------------------------------------------------------------- 「ふだん」（10章 6）
 def usual_ok(name, n_changes):
     """直近7日の定時の回1回あたりの平均の3倍（最低3件）を超えたら止める。定時の回が3回そろうまでは実行しない。"""
+    # オーナーがチャットで「この回は通して」と言ったときだけの1回きりの許し（data/実行記録/<名前>_オーナーの許し.json：期限・上限・言葉）。使ったら消す
+    ap = os.path.join(ROOT, "data", "実行記録", name + "_オーナーの許し.json")
+    al = load_json(ap, None)
+    if al and al.get("期限", "") >= now().isoformat() and n_changes <= int(al.get("上限", 0)):
+        try:
+            os.remove(ap)
+        except OSError:
+            pass
+        return True, "オーナーの許し（%s）で通す：%d件" % (al.get("言葉", ""), n_changes)
     p = os.path.join(ROOT, "data", "実行記録", name + "_回ごと.json")
     hist = [h for h in load_json(p, []) if h.get("t", "") >= (now() - dt.timedelta(days=7)).isoformat()]
     if len(hist) < 3:
