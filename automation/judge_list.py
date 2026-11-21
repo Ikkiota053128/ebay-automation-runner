@@ -47,7 +47,7 @@ def photos_of(c):
             u = re.sub(r"/i/[a-z]/", "/i/n/", u)
         if u.startswith("https://") and u not in out:
             out.append(u)
-    return out[:12]
+    return out[:24]
 
 
 BAD_CAT = re.compile(r"part|accessor|case|bag|strap|cable|charger|battery|book|manual|video game|game|toy|figure|doll|card|"
@@ -127,8 +127,7 @@ def gas_cands():
 def more_photos(c):
     """Yahoo!ショッピングは、APIの写真が1枚だけ。商品ページ（GitHub から読める）から同じ商品の写真（_1, _2 …）を集める。楽天のページは読めない"""
     ph = photos_of(c)
-    if len(ph) >= 3:
-        return ph
+    # 11/22 7:52 オーナー「仕入れ先の写真はすべて取得して」：3枚あっても止めずに、商品ページの写真を全部集める（eBay の上限24枚まで）
     if "store.shopping.yahoo.co.jp" not in c.get("url", ""):   # ほかの店・フリマ・ヤフオク：商品ページの JSON-LD とヤフオクの画像から集める（メルカリは見ない）
         if hand_only(c.get("url")):
             return ph
@@ -176,7 +175,7 @@ def more_photos(c):
                         ph.append(u)
         except Exception:
             pass
-        return ph[:12]
+        return ph[:24]
     try:
         from stock_watch import fetch
         code, html = fetch(c["url"])
@@ -190,7 +189,7 @@ def more_photos(c):
             uu = "https://item-shopping.c.yimg.jp/i/n/" + u
             if uu not in ph:
                 ph.append(uu)
-        return ph[:12]
+        return ph[:24]
     except Exception:
         return ph
 
@@ -513,7 +512,7 @@ def main():
                                                 "候補": {kk: vv for kk, vv in c.items() if not kk.startswith("_")}}
                             if live and len(listed) < n_list and (not listing_limit_stopped() or (listing_limit_left() or 0) >= min_usd) and c.get("写真ファイル") and not c.get("_photos"):
                                 try:
-                                    c["_photos"] = [eb.upload_image(os.path.join(ROOT, f)) for f in c["写真ファイル"][:12]]
+                                    c["_photos"] = [eb.upload_image(os.path.join(ROOT, f)) for f in c["写真ファイル"][:24]]
                                 except Exception as e:
                                     r.update(結論="エラー", 理由="写真を eBay に上げられない：" + err_text(e)[:300] if isinstance(e, EbayError) else str(e)[:300])
                             if r["結論"] == "GO" and live and never_usd and price > never_usd:
