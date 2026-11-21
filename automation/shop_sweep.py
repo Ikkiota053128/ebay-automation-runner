@@ -158,6 +158,14 @@ def main():
     cur = load_json(cur_p, {"i": 0})
     start = cur["i"] % max(len(models), 1)
     todo = (models[start:] + models[:start])[:per]
+    # 11/21 17:43 オーナー「1」：data/店の地引網/先に見る.json の型番を、この回だけ先頭で見る（見たらファイルを消す。順番の i は進めない）
+    pri_p = os.path.join(ROOT, "data", "店の地引網", "先に見る.json")
+    pri = load_json(pri_p, [])
+    if pri:
+        pk = {re.sub(r"[^0-9A-Z]", "", str(x).upper()) for x in pri}
+        first = [m for m in models if re.sub(r"[^0-9A-Z]", "", str(m.get("model", "")).upper()) in pk]
+        todo = first + [m for m in todo if m not in first][:max(0, per - len(first))]
+        print("先に見る型番", len(first))
     seen_p = os.path.join(ROOT, "data", "店の地引網", "見た品.json")
     seen = {k: v for k, v in load_json(seen_p, {}).items() if v >= (now().timestamp() - 14 * 86400)}
     t_end = time.time() + 60 * float(tt.get("時間の上限_分", 20)) - 60
@@ -199,8 +207,14 @@ def main():
                 it.update({"型番": m["model"], "メーカー": m["maker"], "src": src, "cap": m["cap"]})
                 cands.append(it)
         done += 1
-    cur["i"] = (start + done) % max(len(models), 1)
+    nfirst = len(first) if pri else 0
+    cur["i"] = (start + max(0, done - nfirst)) % max(len(models), 1)
     save_json(cur_p, cur)
+    if pri and done >= nfirst:
+        try:
+            os.remove(pri_p)
+        except OSError:
+            pass
     save_json(seen_p, seen)
     # 送る順番：仕入値が上限より大きく安い品（もうかる見込みが高い品）から。送りきれない品は「送る待ち」に残して次の回へ（3日で捨てる）
     for c in cands:
