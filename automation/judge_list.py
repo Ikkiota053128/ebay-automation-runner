@@ -93,10 +93,25 @@ def gas_cands():
             return []
         q = url + "?" + urllib.parse.urlencode({"page": "ghcands", "token": tok, "hours": 48})
         d = json.loads(urllib.request.urlopen(urllib.request.Request(q, headers={"User-Agent": "ebay-automation"}), timeout=120).read().decode("utf-8"))
-        ms = compile_models((gas_get_models() or {"models": []})["models"])
+        raw = (gas_get_models() or {"models": []})["models"]
+        ms = compile_models(raw)
+        # 11/21 19:04 オーナー「教科書の人はこれを自動化してる！私のショップもやって！規約は承知済み」：
+        # メルカリの品は、型番リストに無くても、メーカー名と型番らしい文字が読めれば判定する（フリマのリスト外と同じ guess_model）
+        import flea_sweep as _fs
+        _fs.MAKERS |= {str(x.get("maker", "")).upper() for x in raw if x.get("maker")}
+        kana = {"ニコン": "NIKON", "キヤノン": "CANON", "キャノン": "CANON", "オリンパス": "OLYMPUS", "ソニー": "SONY", "カシオ": "CASIO",
+                "セイコー": "SEIKO", "シチズン": "CITIZEN", "ボス": "BOSS", "ローランド": "ROLAND", "コルグ": "KORG", "ヤマハ": "YAMAHA",
+                "パナソニック": "PANASONIC", "ペンタックス": "PENTAX", "富士フイルム": "FUJIFILM", "フジフイルム": "FUJIFILM", "リコー": "RICOH",
+                "ミノルタ": "MINOLTA", "タムロン": "TAMRON", "シグマ": "SIGMA", "オーディオテクニカ": "AUDIO-TECHNICA", "マミヤ": "MAMIYA",
+                "コンタックス": "CONTAX", "ライカ": "LEICA", "オメガ": "OMEGA", "テクニクス": "TECHNICS", "ケンウッド": "KENWOOD", "パイオニア": "PIONEER"}
         out = []
         for it in d.get("items", []):
             hit = match(it["title"], ms)
+            if not hit and "mercari.com" in str(it.get("url", "")) and it.get("price"):
+                t2 = " ".join([v for k, v in kana.items() if k in it["title"]] + [it["title"], str(it.get("desc", ""))[:300]])
+                g = _fs.guess_model(t2)
+                if g:
+                    hit = {"maker": g[0], "model": g[1]}
             if not hit or not it.get("price"):
                 continue
             m = hit[0] if isinstance(hit, list) else hit
@@ -372,6 +387,8 @@ def main():
     import glob as _glob
     mgo_p = os.path.join(ROOT, "data", "判定", "メルカリGO待ち.json")
     mgo = {k: v for k, v in load_json(mgo_p, {}).items() if v.get("t", 0) >= now().timestamp() - 7 * 86400}
+    mauto_p = os.path.join(ROOT, "data", "判定", "メルカリの自動出品.json")
+    mauto = load_json(mauto_p, {})
     approved, ans_files = set(), []
     for f in sorted(_glob.glob(os.path.join(ROOT, "data", "答え", "*.json"))):
         a = load_json(f, {})
@@ -379,7 +396,11 @@ def main():
             approved |= {str(x) for x in (a.get("商品") or [])}
             ans_files.append(f)
     for k, v in mgo.items():
-        if v.get("商品") in approved:
+        # 11/21 19:04 オーナー「…私のショップもやって」：GO確認待ちのうち、集めてから24時間以内の品も自動で出す（1日の上限の中）
+        recent = v.get("t", 0) >= now().timestamp() - 86400 and mauto.get(now().strftime("%Y-%m-%d"), 0) < int(tt.get("メルカリの自動出品_1日", 5))
+        if v.get("商品") in approved or recent:
+            if recent and v.get("商品") not in approved:
+                mauto[now().strftime("%Y-%m-%d")] = mauto.get(now().strftime("%Y-%m-%d"), 0) + 1
             back.append(dict(v["候補"], _approved=True))
     # 同じ型番は一番安い1品。判定済み・出品中の型番は飛ばす
     best, pre = {}, collections.Counter()
@@ -472,6 +493,13 @@ def main():
                             r.update(結論="GO")
                             live_models.append(k)
                             mid = (re.search(r"mercari\.com/item/(m\d+)", c["url"]) or [None, ""])[1]
+                            # 11/21 19:04 オーナー「…私のショップもやって！規約は承知済み」：メルカリも自動で出す（1日の上限 時刻表 メルカリの自動出品_1日）。
+                            # 上限を超えた品だけ、今までどおり「GO確認待ち」
+                            mday = now().strftime("%Y-%m-%d")
+                            if mid and not str(c["id"]).startswith("人:") and not c.get("_approved") and \
+                                    mauto.get(mday, 0) < int(tt.get("メルカリの自動出品_1日", 5)):
+                                c["_approved"] = True
+                                mauto[mday] = mauto.get(mday, 0) + 1
                             if mid and not str(c["id"]).startswith("人:") and not c.get("_approved"):
                                 r.update(結論="GO確認待ち", 理由="メルカリはオーナーのGOで出品")
                                 mgo[c["id"]] = {"t": now().timestamp(), "商品": mid, "型番": c["型番"], "仕入値": c["price"], "値段": price, "利益": py, "url": c["url"],
@@ -525,7 +553,7 @@ def main():
             r["結論"] = "人に返す"
         if live and r["結論"] == "GO確認待ち":
             done[c["id"]] = {"t": now().timestamp(), "結論": "GO確認待ち"}
-        if live and r.get("出品") and c.get("_approved"):
+        if live and c.get("_approved") and (r.get("出品") or r["結論"] not in ("GO", "GO（後回し）", "エラー")):
             mgo.pop(c["id"], None)
         if live and r["結論"] == "エラー" and re.search(r"already have on eBay|item specific .* is missing|duplicate", str(r.get("理由", "")), re.I):
             r["結論"] = "見送り"   # eBay が重複・必須の項目で止めた品は、毎時やり直さない（同じエラーで枠を使わない）
@@ -559,6 +587,7 @@ def main():
             gas_note = "GASへの知らせに失敗：" + str(e)[:200]
     save_json(done_p, done)
     save_json(mgo_p, mgo)
+    save_json(mauto_p, mauto)
     ch, cm = judge.comp_cache_save()
     if live and ans_files:   # 取り込んだ GO の答え（出品できた・できなかったに関わらず）は取り込み済みへ
         import shutil as _sh
