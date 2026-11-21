@@ -115,7 +115,27 @@ def more_photos(c):
     if len(ph) >= 3:
         return ph
     if "store.shopping.yahoo.co.jp" not in c.get("url", ""):   # ほかの店・フリマ・ヤフオク：商品ページの JSON-LD とヤフオクの画像から集める（メルカリは見ない）
-        if hand_only(c.get("url")) or "item.rakuten.co.jp" in c.get("url", ""):
+        if hand_only(c.get("url")):
+            return ph
+        if "item.rakuten.co.jp" in c.get("url", ""):
+            # 11/21 18:47 オーナー「1 → 2 → 3」：楽天は公式API（itemCode）の写真（mediumImageUrls・最大3枚）を、元の大きさ（?_ex= を外す）で使う。ページは開かない
+            try:
+                from stock_watch import _rk_call, _rk_norm
+                key = _rk_norm(c["url"])
+                rid, acc = os.environ.get("RAKUTEN_APP_ID", "").strip(), os.environ.get("RAKUTEN_ACCESS_KEY", "").strip()
+                relay, tok = os.environ.get("RAKUTEN_RELAY_URL", "").strip(), os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()
+                if key and rid and acc and relay:
+                    j, _ = _rk_call({"format": "json", "formatVersion": 2, "applicationId": rid, "availability": 0, "itemCode": "%s:%s" % key, "hits": 1},
+                                    relay, acc, tok)
+                    for it in (j or {}).get("items") or (j or {}).get("Items") or []:
+                        it = it.get("Item", it)
+                        for u in it.get("mediumImageUrls") or []:
+                            u = (u.get("imageUrl") if isinstance(u, dict) else u) or ""
+                            u = u.split("?")[0]
+                            if u.startswith("https://") and u not in ph:
+                                ph.append(u)
+            except Exception:
+                pass
             return ph
         try:
             from stock_watch import fetch
@@ -306,6 +326,12 @@ def main():
     cap_usd = float(tt.get("今出す売値の上限_ドル", 0) or 0)   # 今は出さない（後回し）線。11/20 7:46 オーナー「今は高額商品出品控えて」（0 なら上限なし）
     never_usd = float(tt.get("出さない売値の上限_ドル", 0) or 0)   # これを超える品は出さない（見送り）。11/20 7:44 オーナー「今後は1000以上の商品出品しないで」
     min_usd = float(tt.get("上限の残りで出す最低の売値_ドル", 60))
+    # 11/21 18:47 オーナー「1 → 2 → 3」：今月の残りの枠が少ないときは、安めの品（$200 まで）を先に出す（同じ枠で多く出して実績を積む）
+    if left is not None and left < float(tt.get("安めを先に出す残り_ドル", 3000)):
+        cheap = float(tt.get("枠が少ないときの売値の上限_ドル", 200))
+        if not cap_usd or cap_usd > cheap:
+            cap_usd = cheap
+            print("今月の残り $%.0f：$%.0f を超える品は後回し（安めを先に出す）" % (left, cheap))
     if ls and live and left is not None and left >= min_usd:
         print("eBay の出品の上限：今月の残り $%.2f に収まる品だけ出す（11/19 14:08 オーナー「出品枠額がなくなるまで出品して」）" % left)
         ls = None
