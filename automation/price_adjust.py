@@ -285,6 +285,29 @@ def main():
                     p["エラー"] = "読み直した値段が $%s" % cur
             else:
                 p["エラー"] = err_text(body)
+                # 25016：値下げ交渉の「自動で断る値段」が新しい値段以上 → オファーごと（値段と値下げ交渉を一緒に）直す（11/21 17:47 オーナー「1〜3お願いします」）
+                if "25016" in p["エラー"]:
+                    try:
+                        oid = next(r["offerId"] for r in rows if r["SKU"] == p["SKU"])
+                        _, o = eb.call("GET", "/sell/inventory/v1/offer/" + oid)
+                        fpv = p.get("最低利益$") or 0
+                        o.setdefault("pricingSummary", {})["price"] = {"value": "%.2f" % p["案$"], "currency": "USD"}
+                        pol = o.get("listingPolicies") or {}
+                        if fpv and fpv + 0.01 < p["案$"]:
+                            pol["bestOfferTerms"] = {"bestOfferEnabled": True, "autoDeclinePrice": {"value": "%.2f" % fpv, "currency": "USD"},
+                                                     "autoAcceptPrice": {"value": "%.2f" % (fpv + 0.01), "currency": "USD"}}
+                        else:
+                            pol["bestOfferTerms"] = {"bestOfferEnabled": False}
+                        o["listingPolicies"] = pol
+                        for k in ("offerId", "status", "listing"):
+                            o.pop(k, None)
+                        eb.call("PUT", "/sell/inventory/v1/offer/" + oid, o, headers={"Content-Language": "en-US"})
+                        st = [x for x in eb.offers_of(p["SKU"]) if x.get("offerId") == oid]
+                        cur = num(st[0]["pricingSummary"]["price"]["value"]) if st else None
+                        okp = cur is not None and abs(cur - p["案$"]) < 0.005
+                        p["エラー"] = "" if okp else "オファーごと直したが、読み直した値段が $%s" % cur
+                    except EbayError as e:
+                        p["エラー"] += " ／オファーごと直すのも失敗：" + err_text(e)
             (done if okp else bad).append(p)
         for p in done:
             fails.pop(p["SKU"], None)
