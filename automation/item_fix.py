@@ -183,7 +183,7 @@ def main():
     if live:
         if any(titles.get(s) for s in out["直した"]):
             save_ledger(rows, ["タイトル"], "商品の直し")
-        cfg["本番"] = False
+        cfg["本番"] = bool(out.get("時間切れ"))   # 時間切れなら、残りを次の回も本番で続ける
         cfg["タイトル"] = {k: v for k, v in titles.items() if k not in out["直した"]}
         cfg["項目"] = {k: v for k, v in aspects.items() if k not in out["直した"]}
         save_json(P, cfg)
