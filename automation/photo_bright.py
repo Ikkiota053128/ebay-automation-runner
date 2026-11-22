@@ -9,6 +9,10 @@ TMP = os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "photo_bright")
 
 
 def get_bytes(u):
+    # eBay の写真は小さい版（s-l300 など）のアドレスのことがあるので、いちばん大きい版を読む
+    import re
+    if "ebayimg.com" in u:
+        u = re.sub(r"/s-l\d+\.", "/s-l1600.", u)
     req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (ebay-automation photo)", "Referer": u})
     with urllib.request.urlopen(req, timeout=40) as r:
         return r.read()
@@ -17,6 +21,10 @@ def get_bytes(u):
 def fix_one(raw, cfg):
     from PIL import Image, ImageEnhance, ImageOps, ImageStat
     im = Image.open(io.BytesIO(raw)).convert("RGB")
+    # eBay は長い辺が500ピクセル未満の写真を断る（25002）。小さい写真は 800 まで拡大する
+    if max(im.size) < 500:
+        k = 800.0 / max(im.size)
+        im = im.resize((max(1, round(im.size[0] * k)), max(1, round(im.size[1] * k))), Image.LANCZOS)
     im = ImageOps.autocontrast(im, cutoff=float(cfg.get("コントラストの外す割合", 0.5)))
     mean = ImageStat.Stat(im.convert("L")).mean[0]
     f = float(cfg.get("目標", 155)) / max(mean, 1.0)
