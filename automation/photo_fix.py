@@ -68,6 +68,8 @@ for r in rows:
     sku = r["SKU"]
     d = done.get(sku, {})
     redo = sku in set(cfg.get("やり直し") or [])
+    hires = sku in set(cfg.get("解像度の直し") or [])   # 11/22 15:40 小さい版（400ピクセル）で上げ直してしまった品を、仕入れ先の元の大きさで直す
+    redo = redo or hires
     if not redo and (d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live and not ALL)):
         continue
     out["見た"] += 1
@@ -94,12 +96,14 @@ for r in rows:
     if mixed and not src:
         out.setdefault("混ざり・正しい写真が読めない", []).append(sku)   # 写真を空にしない（人に知らせる）
         continue
-    if ALL and not (mixed or len(src) > len(cur)):
+    if hires and src:
+        pass   # 仕入れ先の写真（元の大きさ）を使う
+    elif ALL and not (mixed or len(src) > len(cur)):
         if not cur:
             continue
         src = list(cur)   # 仕入れ先から足せない品は、今の写真をそのまま補正する（メルカリ・楽天・前からの品）
     if not live:
-        out["直す予定"].append({"SKU": sku, "前": len(cur), "後": len(src), "仕入元URL": r["仕入元URL"], "今の写真": cur, "仕入れ先の写真": src})
+        out["直す予定"].append({"仕入れ先から": bool(src) and src is not cur and src != list(cur), "SKU": sku, "前": len(cur), "後": len(src), "仕入元URL": r["仕入元URL"], "今の写真": cur, "仕入れ先の写真": src})
         continue
     new, nb = [], 0
     try:
@@ -128,6 +132,7 @@ for r in rows:
     if ok:
         if redo:
             cfg["やり直し"] = [x for x in cfg.get("やり直し", []) if x != sku]
+            cfg["解像度の直し"] = [x for x in cfg.get("解像度の直し", []) if x != sku]
         done[sku] = {"直した日時": jst(), "前": len(cur), "後": after, "明るくした": nb, "失敗": 0}
         out["直した"].append({"SKU": sku, "前": len(cur), "後": after, "明るくした": nb, "出品ID": r.get("eBayの出品ID", "")})
     else:
