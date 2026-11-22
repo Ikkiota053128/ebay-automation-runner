@@ -359,6 +359,7 @@ def withdraw_asked(eb, live):
 
 def main():
     cfg, tt = settings(), timetable(NAME)
+    t_bright_end = time.time() + 60 * float(tt.get("写真を明るくする時間_分", 12))   # 30分で切られないよう、補正は始めてから12分まで
     live = bool(tt.get("実行"))
     mark_started(NAME)
     eb = Ebay()
@@ -557,6 +558,15 @@ def main():
                                 r.update(結論="GO（後回し）", 理由="今は出さない：%s" % ("高額（$%.0f 超え・11/20 7:46 オーナー「今は高額商品出品控えて」）" % cap_usd if cap_usd and price > cap_usd else "今月の出品の上限の残り $%.2f を超える" % listing_limit_left()))
                             if r["結論"] == "GO" and live and len(listed) < n_list and (not listing_limit_stopped() or (listing_limit_left() or 0) >= price):
                                 sku = next_sku(c, 0)
+                                # 11/22 11:13 オーナー「教科書に合わせて」：出品前に全部の写真の明るさを補正して eBay に上げる（失敗したら元の写真のまま）
+                                if tt.get("写真を明るく") and time.time() < t_bright_end:
+                                    try:
+                                        import photo_bright
+                                        b = photo_bright.brighten_all(c.get("_photos") or photos_of(c), eb, sku, tt.get("写真の補正") or {})
+                                        if b:
+                                            c["_photos"] = b
+                                    except Exception:
+                                        pass
                                 try:
                                     pl = make_payload(c, kind, cat, cond, price, fp, ship, sku)
                                     item, offer, why = build(pl, loc)

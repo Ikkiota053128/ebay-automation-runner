@@ -66,7 +66,8 @@ for r in rows:
         break
     sku = r["SKU"]
     d = done.get(sku, {})
-    if d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live):
+    redo = sku in set(cfg.get("やり直し") or [])
+    if not redo and (d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live)):
         continue
     out["見た"] += 1
     try:
@@ -84,7 +85,7 @@ for r in rows:
     mixed = len(sellers) > 1   # 今の写真に、ほかの出品者の写真が混ざっている
     if mixed:
         out.setdefault("混ざり", []).append(sku)
-    if len(src) <= len(cur) and not (mixed and src):
+    if not redo and len(src) <= len(cur) and not (mixed and src) and not cfg.get("全部の写真を補正"):
         done[sku] = dict(d, 足せる写真なし=True, 見た日時=jst(), 枚数=[len(cur), len(src)])
         continue
     if not live:
@@ -92,24 +93,13 @@ for r in rows:
         continue
     new, nb = [], 0
     try:
-        for i, u in enumerate(src):
-            if cfg.get("明るく", True):
-                try:
-                    nu, b = brighten(u, i, sku, cfg)
-                except Exception:
-                    nu, b = u, False   # 取り込めない写真は元のアドレスのまま（写真は減らさない）
-                new.append(nu)
-                nb += b
-            else:
-                new.append(u)
-        # eBay は、eBay に上げた写真（EPS）と外の写真のまぜこぜを断る（25014）。明るくした写真があれば、残りもそのまま eBay に上げる
-        if any("ebayimg.com" in u for u in new) and not all("ebayimg.com" in u for u in new):
-            os.makedirs(TMP, exist_ok=True)
-            for i, u in enumerate(new):
-                if "ebayimg.com" not in u:
-                    fp = os.path.join(TMP, "%s_%02d_raw.jpg" % (sku.replace("/", "_"), i))
-                    open(fp, "wb").write(get_bytes(u))
-                    new[i] = eb.upload_image(fp)
+        # 11/22 11:13 オーナー「教科書に合わせて」：全部の写真に、写真ごとの強さで明るさの補正（photo_bright）
+        if cfg.get("明るく", True):
+            import photo_bright
+            b = photo_bright.brighten_all(src, eb, sku, cfg.get("補正") or {})
+            new, nb = (b, len(b)) if b else (list(src), 0)
+        else:
+            new = list(src)
         p["imageUrls"] = new
         body = {k: v for k, v in it.items() if k in ("product", "condition", "conditionDescription", "conditionDescriptors", "availability", "packageWeightAndSize", "locale")}
         pw = body.get("packageWeightAndSize") or {}
@@ -124,9 +114,13 @@ for r in rows:
         ok, after = False, None
         out["失敗"].append({"SKU": sku, "エラー": err_text(e)})
     if ok:
+        if redo:
+            cfg["やり直し"] = [x for x in cfg.get("やり直し", []) if x != sku]
         done[sku] = {"直した日時": jst(), "前": len(cur), "後": after, "明るくした": nb, "失敗": 0}
         out["直した"].append({"SKU": sku, "前": len(cur), "後": after, "明るくした": nb, "出品ID": r.get("eBayの出品ID", "")})
     else:
         done[sku] = dict(d, 失敗=d.get("失敗", 0) + 1)
+if live:
+    save_json(P, cfg)
 save_json(RP, dict(res, 最後=out))
 print("本番" if live else "ドライラン", "見た", out["見た"], "直した", len(out["直した"]), "予定", len(out["直す予定"]), "失敗", len(out["失敗"]))

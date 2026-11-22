@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: 写真を直す道具（Pillow）を入れる
+        run: pip install -q pillow
       - name: 判定と出品
         env:
           LEDGER_ROOT: ${{ github.workspace }}/data_repo
