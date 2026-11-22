@@ -179,6 +179,14 @@ def more_photos(c):
                 # 11/20 9:41 オーナー「A→Bでお願い」：Yahoo!フリマ・ヤフオクの写真は、画像の中継（auc-pctr など）や JSON の中（\u002F）にあって
                 # 今までの読み方では拾えなかった。中継の後ろの元の写真のアドレスも拾う
                 html = html.replace("\\u002F", "/").replace("\\/", "/")
+                # 11/22：ほかの品（おすすめ・この出品者のほかの品）の写真を拾わないように、ページの中で
+                # 「ほかの品へのリンク」が最初に出てくる所より前だけを見る（この品の写真はページの上の方にまとまっている）
+                if re.search(r"paypayfleamarket|auctions\.yahoo", c.get("url", "")):
+                    own = (re.search(r"/(?:item|auction)/([a-z]?\d{6,})", c.get("url", "")) or [None, ""])[1]
+                    for mm in re.finditer(r"(?:/item/|/jp/auction/)([a-z]?\d{6,})", html):
+                        if mm.group(1) != own and mm.start() > 3000:
+                            html = html[:mm.start()]
+                            break
                 for m in re.findall(r"(?:https?:)?//?(?:[a-z0-9\-]+\.c\.yimg\.jp/(?:i/)?)?(auctions\.c\.yimg\.jp/images\.auctions\.yahoo\.co\.jp/image/[^\"'?\s<>]+?\.(?:jpe?g|png))", html, re.I):
                     u = "https://" + m
                     if u not in ph:

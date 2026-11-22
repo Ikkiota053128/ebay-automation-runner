@@ -15,3 +15,9 @@ for u in urls:
         out.setdefault("keys", {})[k] = [i.start() for i in re.finditer(re.escape(k), html)][:10]
     json.dump(out, open(os.path.join(od, re.sub(r"\W+", "_", u)[-30:] + ".json"), "w"), ensure_ascii=False, indent=1)
 print("ok")
+import judge_list as jl
+res = {}
+for u in urls + ["https://paypayfleamarket.yahoo.co.jp/item/z704647920", "https://paypayfleamarket.yahoo.co.jp/item/z727326506"]:
+    ph = jl.more_photos({"url": u, "id": u, "photos": []})
+    res[u] = ph
+json.dump(res, open(os.path.join(od, "more_photos.json"), "w"), ensure_ascii=False, indent=1)
