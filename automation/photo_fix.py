@@ -61,7 +61,7 @@ for r in rows:
         break
     sku = r["SKU"]
     d = done.get(sku, {})
-    if d.get("直した日時") or d.get("失敗", 0) >= 2 or d.get("足せる写真なし"):
+    if d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live):
         continue
     out["見た"] += 1
     try:
@@ -79,7 +79,7 @@ for r in rows:
         done[sku] = dict(d, 足せる写真なし=True, 見た日時=jst(), 枚数=[len(cur), len(src)])
         continue
     if not live:
-        out["直す予定"].append({"SKU": sku, "前": len(cur), "後": len(src)})
+        out["直す予定"].append({"SKU": sku, "前": len(cur), "後": len(src), "仕入元URL": r["仕入元URL"], "今の写真": cur, "仕入れ先の写真": src})
         continue
     new, nb = [], 0
     try:
