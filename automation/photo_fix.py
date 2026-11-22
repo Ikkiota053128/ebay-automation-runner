@@ -69,7 +69,8 @@ for r in rows:
     d = done.get(sku, {})
     redo = sku in set(cfg.get("やり直し") or [])
     hires = sku in set(cfg.get("解像度の直し") or [])   # 11/22 15:40 小さい版（400ピクセル）で上げ直してしまった品を、仕入れ先の元の大きさで直す
-    redo = redo or hires
+    redo = redo or hires or sku in set(cfg.get("1枚目だけ正方形") or [])
+    tail = []
     if not redo and (d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live and not ALL)):
         continue
     out["見た"] += 1
@@ -80,7 +81,7 @@ for r in rows:
     p = it.setdefault("product", {})
     cur = p.get("imageUrls") or []
     src = []
-    if r.get("仕入元URL") and not hand_only(r["仕入元URL"]):
+    if r.get("仕入元URL") and not hand_only(r["仕入元URL"]) and (hires or sku not in set(cfg.get("1枚目だけ正方形") or [])):
         try:
             src = jl.more_photos({"url": r["仕入元URL"], "id": sku, "photos": []})[:24]
         except Exception:
@@ -97,21 +98,42 @@ for r in rows:
         out.setdefault("混ざり・正しい写真が読めない", []).append(sku)   # 写真を空にしない（人に知らせる）
         continue
     if hires and src:
-        pass   # 仕入れ先の写真（元の大きさ）を使う
+        if "rakuten" in str(r.get("仕入元URL")) and len(src) < len(cur):
+            tail = list(cur[len(src):])   # 楽天は公式APIの3枚だけ元の大きさ。4枚目からは今の写真のまま（もう補正済み・eBay の写真なので混ざらない）
+    elif hires and not src:
+        continue   # 仕入れ先から取り直せない品は、もう一度上げ直さない（今の大きさのまま）
     elif ALL and not (mixed or len(src) > len(cur)):
         if not cur:
             continue
         src = list(cur)   # 仕入れ先から足せない品は、今の写真をそのまま補正する（メルカリ・楽天・前からの品）
+    sq_only = sku in set(cfg.get("1枚目だけ正方形") or []) and not hires
+    if sq_only:
+        if not cur: continue
+        if not live:
+            out["直す予定"].append({"SKU": sku, "1枚目だけ正方形": True}); continue
+        try:
+            import photo_bright as _pb
+            from PIL import Image
+            im = _pb.square(Image.open(io.BytesIO(_pb.get_bytes(cur[0]))).convert("RGB"), float((cfg.get("補正") or {}).get("品の大きさ", 0.9)))
+            os.makedirs(TMP, exist_ok=True); fp = os.path.join(TMP, sku.replace("/", "_") + "_sq.jpg"); im.save(fp, "JPEG", quality=92)
+            src = [eb.upload_image(fp)] + list(cur[1:])
+        except Exception as e:
+            out["失敗"].append({"SKU": sku, "エラー": "正方形にできない " + str(e)[:150]}); continue
+        cfg_b = False
+    else:
+        cfg_b = True
     if not live:
-        out["直す予定"].append({"仕入れ先から": bool(src) and src is not cur and src != list(cur), "SKU": sku, "前": len(cur), "後": len(src), "仕入元URL": r["仕入元URL"], "今の写真": cur, "仕入れ先の写真": src})
+        out["直す予定"].append({"楽天の残り": len(tail), "仕入れ先から": bool(src) and src is not cur and src != list(cur), "SKU": sku, "前": len(cur), "後": len(src), "仕入元URL": r["仕入元URL"], "今の写真": cur, "仕入れ先の写真": src})
         continue
     new, nb = [], 0
     try:
         # 11/22 11:13 オーナー「教科書に合わせて」：全部の写真に、写真ごとの強さで明るさの補正（photo_bright）
-        if cfg.get("明るく", True):
+        if cfg_b and cfg.get("明るく", True):
             import photo_bright
             b = photo_bright.brighten_all(src, eb, sku, cfg.get("補正") or {})
             new, nb = (b, len(b)) if b else (list(src), 0)
+            if b and tail:
+                new = (new + tail)[:24]
         else:
             new = list(src)
         if not new:
@@ -124,8 +146,17 @@ for r in rows:
             if not pw.get("dimensions") or not all(float(pw["dimensions"].get(k) or 0) > 0 for k in ("length", "width", "height")):
                 body.pop("packageWeightAndSize", None)
         eb.call("PUT", "/sell/inventory/v1/inventory_item/" + urllib.parse.quote(sku, safe=""), body, headers=CL)
-        after = len((eb.inventory_item(sku).get("product") or {}).get("imageUrls") or [])
+        got = (eb.inventory_item(sku).get("product") or {}).get("imageUrls") or []
+        after = len(got)
         ok = after == len(new)
+        # 11/22 16:17 オーナー「おすすめで」：写真が前より小さくなっていたら、前の写真に戻して知らせる（今日の 400ピクセルの事故を二度と起こさない）
+        import photo_bright as _pb
+        b4 = max([x for x in map(_pb.long_side, cur) if x] or [0])
+        af = max([x for x in map(_pb.long_side, got) if x] or [0])
+        if ok and b4 and af and af < b4 * 0.9:
+            p["imageUrls"] = cur
+            eb.call("PUT", "/sell/inventory/v1/inventory_item/" + urllib.parse.quote(sku, safe=""), body, headers=CL)
+            raise EbayError(0, {"raw": "写真が小さくなる（前 %d → 後 %d ピクセル）ので前の写真に戻した" % (b4, af)})
     except EbayError as e:
         ok, after = False, None
         out["失敗"].append({"SKU": sku, "エラー": err_text(e)})
@@ -133,6 +164,7 @@ for r in rows:
         if redo:
             cfg["やり直し"] = [x for x in cfg.get("やり直し", []) if x != sku]
             cfg["解像度の直し"] = [x for x in cfg.get("解像度の直し", []) if x != sku]
+            cfg["1枚目だけ正方形"] = [x for x in cfg.get("1枚目だけ正方形", []) if x != sku]
         done[sku] = {"直した日時": jst(), "前": len(cur), "後": after, "明るくした": nb, "失敗": 0}
         out["直した"].append({"SKU": sku, "前": len(cur), "後": after, "明るくした": nb, "出品ID": r.get("eBayの出品ID", "")})
     else:

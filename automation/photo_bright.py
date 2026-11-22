@@ -19,9 +19,31 @@ def get_bytes(u):
         return r.read()
 
 
-def fix_one(raw, cfg):
+def square(im, fill=0.9):
+    """1枚目の写真：まわりの余白（背景と同じ色）を切り、背景の色の正方形の中に品を大きく置く（品が枠の9割）。
+    11/22 16:17 オーナー「おすすめでお願いします」（一覧は正方形の枠なので、横長だと品が小さく見える）"""
+    from PIL import Image, ImageChops
+    w, h = im.size
+    cs = [im.getpixel(p) for p in ((1, 1), (w - 2, 1), (1, h - 2), (w - 2, h - 2))]
+    bg = tuple(sorted(c[i] for c in cs)[1] for i in range(3))   # 4すみの真ん中あたりの色
+    if max(abs(a - b) for c in cs for a, b in zip(c, bg)) > 40:
+        return im   # すみの色がばらばら（背景が一色ではない）＝切らない
+    diff = ImageChops.difference(im, Image.new("RGB", im.size, bg)).convert("L").point(lambda v: 255 if v > 30 else 0)
+    bb = diff.getbbox()
+    if not bb or (bb[2] - bb[0]) * (bb[3] - bb[1]) < 0.15 * w * h:
+        return im   # 品が見つからない・小さすぎる（読みまちがいの恐れ）
+    im = im.crop(bb)
+    side = int(max(im.size) / fill)
+    can = Image.new("RGB", (side, side), bg)
+    can.paste(im, ((side - im.size[0]) // 2, (side - im.size[1]) // 2))
+    return can
+
+
+def fix_one(raw, cfg, first=False):
     from PIL import Image, ImageEnhance, ImageOps, ImageStat
     im = Image.open(io.BytesIO(raw)).convert("RGB")
+    if first and cfg.get("1枚目を正方形", True):
+        im = square(im, float(cfg.get("品の大きさ", 0.9)))
     # eBay は長い辺が500ピクセル未満の写真を断る（25002）。小さい写真は 800 まで拡大する
     if max(im.size) < 500:
         k = 800.0 / max(im.size)
@@ -36,6 +58,17 @@ def fix_one(raw, cfg):
     return b.getvalue(), round(mean), round(f, 2)
 
 
+def long_side(u):
+    """eBay の写真のアドレス（.../00/s/<幅X高さ>/...）から、長い辺のピクセルを読む。読めなければ None"""
+    import base64, re
+    m = re.search(r"/00/s/([A-Za-z0-9=]+)/", str(u))
+    try:
+        a = base64.b64decode(m.group(1)).decode().upper().split("X")
+        return max(int(a[0]), int(a[1]))
+    except Exception:
+        return None
+
+
 def brighten_all(urls, eb, sku, cfg=None):
     """全部の写真を補正して eBay に上げたアドレスの一覧を返す。失敗したら None（元の写真のまま使う）"""
     cfg = cfg or {}
@@ -43,7 +76,7 @@ def brighten_all(urls, eb, sku, cfg=None):
     out = []
     try:
         for i, u in enumerate(urls[:24]):
-            data, _, _ = fix_one(get_bytes(u), cfg)
+            data, _, _ = fix_one(get_bytes(u), cfg, first=(i == 0))
             p = os.path.join(TMP, "%s_%02d.jpg" % (str(sku).replace("/", "_"), i))
             open(p, "wb").write(data)
             out.append(eb.upload_image(p))
