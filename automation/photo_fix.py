@@ -51,8 +51,9 @@ done = res.setdefault("品", {})
 out = {"時刻": jst(), "本番": live, "直した": [], "直す予定": [], "失敗": [], "見た": 0}
 t_end = time.time() + 60 * float(cfg.get("時間の上限_分", 22))
 n_max = int(cfg.get("件数", 20))
+ALL = bool(cfg.get("全部の写真を補正"))   # 11/22 11:23 オーナー「他の出品中の写真、これから出品する商品もちゃんと加工して出品して！」
 rows = [r for r in read_ledger() if r.get("状態") == "出品中" and r.get("offerId") and not r["SKU"].startswith("STK-")
-        and r.get("仕入元URL") and not hand_only(r["仕入元URL"]) and "rakuten" not in r["仕入元URL"]]
+        and (ALL or (r.get("仕入元URL") and not hand_only(r["仕入元URL"]) and "rakuten" not in r["仕入元URL"]))]
 first = list(cfg.get("先に直す") or [])
 skip = set(cfg.get("外す") or [])
 rows = sorted([r for r in rows if r["SKU"] not in skip], key=lambda r: (r["SKU"] not in first, first.index(r["SKU"]) if r["SKU"] in first else 0))
@@ -67,7 +68,7 @@ for r in rows:
     sku = r["SKU"]
     d = done.get(sku, {})
     redo = sku in set(cfg.get("やり直し") or [])
-    if not redo and (d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live)):
+    if not redo and (d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live and not ALL)):
         continue
     out["見た"] += 1
     try:
@@ -76,11 +77,13 @@ for r in rows:
         continue
     p = it.setdefault("product", {})
     cur = p.get("imageUrls") or []
-    try:
-        src = jl.more_photos({"url": r["仕入元URL"], "id": sku, "photos": []})[:24]
-    except Exception:
-        src = []
-    time.sleep(4)
+    src = []
+    if r.get("仕入元URL") and not hand_only(r["仕入元URL"]):
+        try:
+            src = jl.more_photos({"url": r["仕入元URL"], "id": sku, "photos": []})[:24]
+        except Exception:
+            src = []
+        time.sleep(4)
     sellers = {m.group(1) for m in (jl.SELLER_RX.search(u) for u in cur) if m}
     mixed = len(sellers) > 1   # 今の写真に、ほかの出品者の写真が混ざっている
     if mixed:
@@ -88,6 +91,13 @@ for r in rows:
     if not redo and len(src) <= len(cur) and not (mixed and src) and not cfg.get("全部の写真を補正"):
         done[sku] = dict(d, 足せる写真なし=True, 見た日時=jst(), 枚数=[len(cur), len(src)])
         continue
+    if mixed and not src:
+        out.setdefault("混ざり・正しい写真が読めない", []).append(sku)   # 写真を空にしない（人に知らせる）
+        continue
+    if ALL and not (mixed or len(src) > len(cur)):
+        if not cur:
+            continue
+        src = list(cur)   # 仕入れ先から足せない品は、今の写真をそのまま補正する（メルカリ・楽天・前からの品）
     if not live:
         out["直す予定"].append({"SKU": sku, "前": len(cur), "後": len(src), "仕入元URL": r["仕入元URL"], "今の写真": cur, "仕入れ先の写真": src})
         continue
@@ -100,6 +110,8 @@ for r in rows:
             new, nb = (b, len(b)) if b else (list(src), 0)
         else:
             new = list(src)
+        if not new:
+            raise EbayError(0, {"raw": "写真が0枚になるので直さない"})
         p["imageUrls"] = new
         body = {k: v for k, v in it.items() if k in ("product", "condition", "conditionDescription", "conditionDescriptors", "availability", "packageWeightAndSize", "locale")}
         pw = body.get("packageWeightAndSize") or {}
