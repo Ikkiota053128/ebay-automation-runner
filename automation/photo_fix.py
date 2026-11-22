@@ -69,7 +69,7 @@ for r in rows:
     d = done.get(sku, {})
     redo = sku in set(cfg.get("やり直し") or [])
     hires = sku in set(cfg.get("解像度の直し") or [])   # 11/22 15:40 小さい版（400ピクセル）で上げ直してしまった品を、仕入れ先の元の大きさで直す
-    redo = redo or hires or sku in set(cfg.get("1枚目だけ正方形") or [])
+    redo = redo or hires or sku in set(cfg.get("1枚目だけ正方形") or []) or sku in set(cfg.get("1枚目と2枚目を入れ替え") or [])
     tail = []
     if not redo and (d.get("直した日時") or d.get("失敗", 0) >= 2 or (d.get("足せる写真なし") and live and not ALL)):
         continue
@@ -81,7 +81,7 @@ for r in rows:
     p = it.setdefault("product", {})
     cur = p.get("imageUrls") or []
     src = []
-    if r.get("仕入元URL") and not hand_only(r["仕入元URL"]) and (hires or sku not in set(cfg.get("1枚目だけ正方形") or [])):
+    if r.get("仕入元URL") and not hand_only(r["仕入元URL"]) and (hires or sku not in set(cfg.get("1枚目だけ正方形") or []) | set(cfg.get("1枚目と2枚目を入れ替え") or [])):
         try:
             src = jl.more_photos({"url": r["仕入元URL"], "id": sku, "photos": []})[:24]
         except Exception:
@@ -106,6 +106,10 @@ for r in rows:
         if not cur:
             continue
         src = list(cur)   # 仕入れ先から足せない品は、今の写真をそのまま補正する（メルカリ・楽天・前からの品）
+    if sku in set(cfg.get("1枚目と2枚目を入れ替え") or []):   # 11/22 16:29 オーナー「1枚目の写真を2番目の写真に変えられない？」→「2品とも」
+        if len(cur) < 2: continue
+        src = [cur[1], cur[0]] + list(cur[2:])
+        hires, tail = False, []
     sq_only = sku in set(cfg.get("1枚目だけ正方形") or []) and not hires
     if sq_only:
         if not cur: continue
@@ -121,7 +125,7 @@ for r in rows:
             out["失敗"].append({"SKU": sku, "エラー": "正方形にできない " + str(e)[:150]}); continue
         cfg_b = False
     else:
-        cfg_b = True
+        cfg_b = sku not in set(cfg.get("1枚目と2枚目を入れ替え") or [])   # 入れ替えだけ（補正し直さない）
     if not live:
         out["直す予定"].append({"楽天の残り": len(tail), "仕入れ先から": bool(src) and src is not cur and src != list(cur), "SKU": sku, "前": len(cur), "後": len(src), "仕入元URL": r["仕入元URL"], "今の写真": cur, "仕入れ先の写真": src})
         continue
@@ -165,6 +169,7 @@ for r in rows:
             cfg["やり直し"] = [x for x in cfg.get("やり直し", []) if x != sku]
             cfg["解像度の直し"] = [x for x in cfg.get("解像度の直し", []) if x != sku]
             cfg["1枚目だけ正方形"] = [x for x in cfg.get("1枚目だけ正方形", []) if x != sku]
+            cfg["1枚目と2枚目を入れ替え"] = [x for x in cfg.get("1枚目と2枚目を入れ替え", []) if x != sku]
         done[sku] = {"直した日時": jst(), "前": len(cur), "後": after, "明るくした": nb, "失敗": 0}
         out["直した"].append({"SKU": sku, "前": len(cur), "後": after, "明るくした": nb, "出品ID": r.get("eBayの出品ID", "")})
     else:
