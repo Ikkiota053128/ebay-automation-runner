@@ -75,7 +75,11 @@ for r in rows:
     except Exception:
         src = []
     time.sleep(4)
-    if len(src) <= len(cur):
+    sellers = {m.group(1) for m in (jl.SELLER_RX.search(u) for u in cur) if m}
+    mixed = len(sellers) > 1   # 今の写真に、ほかの出品者の写真が混ざっている
+    if mixed:
+        out.setdefault("混ざり", []).append(sku)
+    if len(src) <= len(cur) and not (mixed and src):
         done[sku] = dict(d, 足せる写真なし=True, 見た日時=jst(), 枚数=[len(cur), len(src)])
         continue
     if not live:

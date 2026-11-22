@@ -124,6 +124,25 @@ def gas_cands():
         return []
 
 
+SELLER_RX = re.compile(r"images\.auctions\.yahoo\.co\.jp/image/[^/]+/[^/]+/users?/([0-9a-f]{32,64})/")
+
+
+def same_seller(ph, html, c):
+    """Yahoo!フリマ・ヤフオクの写真を、この品の出品者の写真だけにする（ほかの出品者の写真は外す）"""
+    if not any(SELLER_RX.search(u) for u in ph):
+        return ph
+    main = None
+    for u in photos_of(c) + re.findall(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html or "") + \
+            re.findall(r'<meta[^>]+content="([^"]+)"[^>]+property="og:image"', html or ""):
+        m = SELLER_RX.search(u)
+        if m:
+            main = m.group(1)
+            break
+    if not main:
+        return ph[:1]   # 出品者が分からないときは1枚目だけ（混ぜない）
+    return [u for u in ph if (SELLER_RX.search(u) or [None, None])[1] == main]
+
+
 def more_photos(c):
     """Yahoo!ショッピングは、APIの写真が1枚だけ。商品ページ（GitHub から読める）から同じ商品の写真（_1, _2 …）を集める。楽天のページは読めない"""
     ph = photos_of(c)
@@ -173,6 +192,9 @@ def more_photos(c):
                 for u in (p.get("photos") or []) + IMG_RX.findall(html) + ho:
                     if u.startswith("https://") and u not in ph:
                         ph.append(u)
+                # 11/22 オーナー「写真はすべて」で見つけた間違い：Yahoo!フリマ・ヤフオクのページには、ほかの出品者の品（おすすめ）の写真も入っている。
+                # 写真のアドレスの users/<出品者の印> が、この品の1枚目（og:image）と同じ写真だけを残す
+                ph = same_seller(ph, html, c)
         except Exception:
             pass
         return ph[:24]
