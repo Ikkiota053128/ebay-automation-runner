@@ -30,7 +30,7 @@ def square(im, fill=0.9):
         return im   # すみの色がばらばら（背景が一色ではない）＝切らない
     diff = ImageChops.difference(im, Image.new("RGB", im.size, bg)).convert("L").point(lambda v: 255 if v > 30 else 0)
     bb = diff.getbbox()
-    if not bb or (bb[2] - bb[0]) * (bb[3] - bb[1]) < 0.15 * w * h:
+    if not bb or (bb[2] - bb[0]) * (bb[3] - bb[1]) < 0.04 * w * h:
         return im   # 品が見つからない・小さすぎる（読みまちがいの恐れ）
     im = im.crop(bb)
     side = int(max(im.size) / fill)
