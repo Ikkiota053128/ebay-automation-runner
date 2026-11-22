@@ -35,7 +35,20 @@ for s in skus:
         urls = (eb.inventory_item(s).get("product") or {}).get("imageUrls") or []
         if not urls: continue
         im = Image.open(io.BytesIO(get(urls[0])))
-        m = measure(im); m["枚数"] = len(urls)
+        m = measure(im); m["枚数"] = len(urls); m["アドレス"] = urls[:3]
+        try:
+            import json as _j
+            pid = re.search(r"images/g/([^/]+)/", urls[0])
+            m["別の大きさ"] = {}
+            for v in ([urls[0]] + (["https://i.ebayimg.com/images/g/%s/s-l1600.jpg" % pid.group(1), "https://i.ebayimg.com/images/g/%s/s-l1600.png" % pid.group(1)] if pid else [])):
+                try:
+                    req = urllib.request.Request(v, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=40) as r: b = r.read()
+                    m["別の大きさ"][v] = Image.open(io.BytesIO(b)).size
+                except Exception as e2:
+                    m["別の大きさ"][v] = str(e2)[:80]
+        except Exception:
+            pass
         out["品"][s] = m
         t = im.convert("RGB"); t.thumbnail((500, 500)); t.save(os.path.join(od, s + ".jpg"), quality=80)
     except Exception as e:
