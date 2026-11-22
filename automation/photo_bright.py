@@ -42,7 +42,7 @@ def square(im, fill=0.9):
 def fix_one(raw, cfg, first=False):
     from PIL import Image, ImageEnhance, ImageOps, ImageStat
     im = Image.open(io.BytesIO(raw)).convert("RGB")
-    if first and cfg.get("1枚目を正方形", True):
+    if first and cfg.get("1枚目を正方形", False):   # 11/22 16:30 オーナー「正方形はやめて！」
         im = square(im, float(cfg.get("品の大きさ", 0.9)))
     # eBay は長い辺が500ピクセル未満の写真を断る（25002）。小さい写真は 800 まで拡大する
     if max(im.size) < 500:
