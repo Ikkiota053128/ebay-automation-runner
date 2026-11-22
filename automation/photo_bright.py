@@ -13,6 +13,7 @@ def get_bytes(u):
     import re
     if "ebayimg.com" in u:
         u = re.sub(r"/s-l\d+\.", "/s-l1600.", u)
+        u = re.sub(r"/\$_\d+\.(JPG|jpg|PNG|png)", r"/$_57.\1", u)   # $_1 は400ピクセルの版。$_57 がいちばん大きい版
     req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (ebay-automation photo)", "Referer": u})
     with urllib.request.urlopen(req, timeout=40) as r:
         return r.read()

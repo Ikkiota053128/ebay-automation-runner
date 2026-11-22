@@ -27,13 +27,22 @@ def measure(im):
 eb = Ebay()
 want = load_json(os.path.join(ROOT, "data", "判定", "写真の大きさ_対象.json"), [])
 rows = [r for r in read_ledger() if r.get("状態") == "出品中" and not r["SKU"].startswith("STK-")]
-skus = want or [r["SKU"] for r in rows][-40:]
+skus = want if want and want != "全部" else ([r["SKU"] for r in rows] if want == "全部" else [r["SKU"] for r in rows][-40:])
 od = os.path.join(ROOT, "data", "ログ", "写真の大きさ"); os.makedirs(od, exist_ok=True)
 out = {"時刻": jst(), "品": {}}
 for s in skus:
     try:
         urls = (eb.inventory_item(s).get("product") or {}).get("imageUrls") or []
         if not urls: continue
+        if want == "全部":   # 写真は読まず、アドレスの中の大きさ（00/s/<幅X高さ>）だけ見る
+            import base64
+            sz = []
+            for u in urls:
+                mm = re.search(r"/00/s/([A-Za-z0-9=]+)/", u)
+                try: hw = base64.b64decode(mm.group(1)).decode().split("X"); sz.append(max(int(hw[0]), int(hw[1])))
+                except Exception: sz.append(None)
+            out["品"][s] = {"枚数": len(urls), "長い辺": sz}
+            continue
         im = Image.open(io.BytesIO(get(urls[0])))
         m = measure(im); m["枚数"] = len(urls); m["アドレス"] = urls[:3]
         try:
