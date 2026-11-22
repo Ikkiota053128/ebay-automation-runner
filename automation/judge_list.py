@@ -132,8 +132,9 @@ def same_seller(ph, html, c):
     if not any(SELLER_RX.search(u) for u in ph):
         return ph
     main = None
-    for u in photos_of(c) + re.findall(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html or "") + \
-            re.findall(r'<meta[^>]+content="([^"]+)"[^>]+property="og:image"', html or ""):
+    # この品の出品者は、商品ページの og:image（この品の1枚目）で決める。検索の一覧から来た写真（photos_of）は、ほかの品の写真のことがあるので後回し
+    for u in re.findall(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html or "") + \
+            re.findall(r'<meta[^>]+content="([^"]+)"[^>]+property="og:image"', html or "") + photos_of(c):
         m = SELLER_RX.search(u)
         if m:
             main = m.group(1)
