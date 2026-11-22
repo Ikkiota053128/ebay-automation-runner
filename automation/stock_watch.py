@@ -108,6 +108,45 @@ def rakuten_stock(url, title=""):
     return (True, "在庫あり（楽天API）") if int(it.get("availability") or 0) == 1 else (False, "売り切れ（楽天API）")
 
 
+def rakuten_item(url, title=""):
+    """楽天の公式APIで、URLと同じ商品を探して返す（見つからなければ None）。rakuten_stock と同じ探し方（① 商品コード → ② 店＋型番 → 店の新着）。
+    11/22 16:39：写真の取り直しで、商品コードだけでは見つからない店が多かったので足した"""
+    key = _rk_norm(url)
+    rid, acc = os.environ.get("RAKUTEN_APP_ID", "").strip(), os.environ.get("RAKUTEN_ACCESS_KEY", "").strip()
+    relay, tok = os.environ.get("RAKUTEN_RELAY_URL", "").strip(), os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()
+    if not key or not (rid and acc and relay):
+        return None
+    base = {"format": "json", "formatVersion": 2, "applicationId": rid, "availability": 0}
+
+    def pick(j):
+        for it in (j or {}).get("items") or (j or {}).get("Items") or []:
+            it = it.get("Item", it)
+            if _rk_norm(it.get("itemUrl")) == key:
+                return it
+        return None
+
+    j, err = _rk_call(dict(base, itemCode="%s:%s" % key, hits=1), relay, acc, tok)
+    it = pick(j)
+    if it:
+        return it
+    try:
+        from price_adjust import model_of
+        md = model_of(title) or ""
+    except Exception:
+        md = ""
+    plans = [dict(base, shopCode=key[0], keyword=md, hits=30)] if md and len(md) >= 3 else []
+    plans += [dict(base, shopCode=key[0], hits=30, sort="-updateTimestamp", page=p) for p in (1, 2, 3)]
+    for q in plans:
+        time.sleep(1.1)
+        j, err = _rk_call(q, relay, acc, tok)
+        if err:
+            continue
+        it = pick(j)
+        if it:
+            return it
+    return None
+
+
 def judge(code, html):
     """返事：(ある=True／ない=False／読めなかった=None, 理由)"""
     if code in (404, 410):

@@ -154,20 +154,13 @@ def more_photos(c):
         if "item.rakuten.co.jp" in c.get("url", ""):
             # 11/21 18:47 オーナー「1 → 2 → 3」：楽天は公式API（itemCode）の写真（mediumImageUrls・最大3枚）を、元の大きさ（?_ex= を外す）で使う。ページは開かない
             try:
-                from stock_watch import _rk_call, _rk_norm
-                key = _rk_norm(c["url"])
-                rid, acc = os.environ.get("RAKUTEN_APP_ID", "").strip(), os.environ.get("RAKUTEN_ACCESS_KEY", "").strip()
-                relay, tok = os.environ.get("RAKUTEN_RELAY_URL", "").strip(), os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()
-                if key and rid and acc and relay:
-                    j, _ = _rk_call({"format": "json", "formatVersion": 2, "applicationId": rid, "availability": 0, "itemCode": "%s:%s" % key, "hits": 1},
-                                    relay, acc, tok)
-                    for it in (j or {}).get("items") or (j or {}).get("Items") or []:
-                        it = it.get("Item", it)
-                        for u in it.get("mediumImageUrls") or []:
-                            u = (u.get("imageUrl") if isinstance(u, dict) else u) or ""
-                            u = u.split("?")[0]
-                            if u.startswith("https://") and u not in ph:
-                                ph.append(u)
+                from stock_watch import rakuten_item
+                it = rakuten_item(c["url"], c.get("title") or c.get("name") or "")
+                for u in (it or {}).get("mediumImageUrls") or []:
+                    u = (u.get("imageUrl") if isinstance(u, dict) else u) or ""
+                    u = u.split("?")[0]
+                    if u.startswith("https://") and u not in ph:
+                        ph.append(u)
             except Exception:
                 pass
             return ph

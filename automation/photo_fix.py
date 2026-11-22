@@ -83,7 +83,7 @@ for r in rows:
     src = []
     if r.get("仕入元URL") and not hand_only(r["仕入元URL"]) and (hires or sku not in set(cfg.get("1枚目だけ正方形") or []) | set(cfg.get("1枚目と2枚目を入れ替え") or [])):
         try:
-            src = jl.more_photos({"url": r["仕入元URL"], "id": sku, "photos": []})[:24]
+            src = jl.more_photos({"url": r["仕入元URL"], "id": sku, "photos": [], "title": r.get("タイトル") or r.get("商品名") or ""})[:24]
         except Exception:
             src = []
         time.sleep(4)
