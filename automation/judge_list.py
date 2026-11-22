@@ -183,8 +183,13 @@ def more_photos(c):
             return ph
         m = re.search(r"/i/[a-z]/([A-Za-z0-9\-]+_[A-Za-z0-9\-]+)", ph[0]) if ph else None
         base = m.group(1) if m else ""
+        if not base:   # 写真がまだ無いとき：URL の 店/商品コード.html から（ほかの商品の写真を拾わない）
+            mm = re.search(r"store\.shopping\.yahoo\.co\.jp/([^/]+)/([^/.?]+)\.html", c.get("url", ""))
+            base = "%s_%s" % (mm.group(1), mm.group(2)) if mm else None
+        if base is None:
+            return ph
         for u in re.findall(r"https://item-shopping\.c\.yimg\.jp/i/[a-z]/([A-Za-z0-9_\-]+)", html):
-            if base and not u.startswith(base):
+            if not (u == base or u.startswith(base + "_")):
                 continue
             uu = "https://item-shopping.c.yimg.jp/i/n/" + u
             if uu not in ph:
