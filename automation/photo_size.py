@@ -10,6 +10,7 @@ from PIL import Image, ImageChops
 def get(u):
     if "ebayimg.com" in u:
         u = re.sub(r"/s-l\d+\.", "/s-l1600.", u)
+        u = re.sub(r"/\$_\d+\.(JPG|jpg|PNG|png)", r"/$_57.\1", u)
     req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=40) as r:
         return r.read()
