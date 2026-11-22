@@ -102,6 +102,14 @@ for r in rows:
                 nb += b
             else:
                 new.append(u)
+        # eBay は、eBay に上げた写真（EPS）と外の写真のまぜこぜを断る（25014）。明るくした写真があれば、残りもそのまま eBay に上げる
+        if any("ebayimg.com" in u for u in new) and not all("ebayimg.com" in u for u in new):
+            os.makedirs(TMP, exist_ok=True)
+            for i, u in enumerate(new):
+                if "ebayimg.com" not in u:
+                    fp = os.path.join(TMP, "%s_%02d_raw.jpg" % (sku.replace("/", "_"), i))
+                    open(fp, "wb").write(get_bytes(u))
+                    new[i] = eb.upload_image(fp)
         p["imageUrls"] = new
         body = {k: v for k, v in it.items() if k in ("product", "condition", "conditionDescription", "conditionDescriptors", "availability", "packageWeightAndSize", "locale")}
         pw = body.get("packageWeightAndSize") or {}
