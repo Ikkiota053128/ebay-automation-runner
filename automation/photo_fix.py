@@ -53,6 +53,11 @@ t_end = time.time() + 60 * float(cfg.get("時間の上限_分", 22))
 n_max = int(cfg.get("件数", 20))
 rows = [r for r in read_ledger() if r.get("状態") == "出品中" and r.get("offerId") and not r["SKU"].startswith("STK-")
         and r.get("仕入元URL") and not hand_only(r["仕入元URL"]) and "rakuten" not in r["仕入元URL"]]
+first = list(cfg.get("先に直す") or [])
+skip = set(cfg.get("外す") or [])
+rows = sorted([r for r in rows if r["SKU"] not in skip], key=lambda r: (r["SKU"] not in first, first.index(r["SKU"]) if r["SKU"] in first else 0))
+if cfg.get("先に直すだけ"):
+    rows = [r for r in rows if r["SKU"] in first]
 for r in rows:
     if time.time() > t_end:
         out["時間切れ"] = True
