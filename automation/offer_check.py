@@ -16,7 +16,7 @@ for r in read_ledger():
         out["まとめ"]["offerIdなし"] += 1
         continue
     try:
-        o = eb.call("GET", "/sell/inventory/v1/offer/" + oid)
+        _, o = eb.call("GET", "/sell/inventory/v1/offer/" + oid)
     except EbayError as e:
         out["品"][r["SKU"]] = {"結果": "読めない", "エラー": err_text(e)[:200]}
         out["まとめ"]["読めない"] += 1
