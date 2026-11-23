@@ -229,6 +229,10 @@ def quote(act0, d, qs):
     target = r2(L * 0.99 if L >= qs["high"] else L - 1)
     if target >= fp:
         return target, "最安 $%.2f より%s安く" % (L, "1%" if L >= qs["high"] else "$1"), fp
+    if qs.get("strict2"):   # 11/23 14:08 オーナー「最安値か最安値から2番目の商品しか出さないで」：フロアが2番目より安いときだけ（2番目の位置）
+        if L2 and fp < L2:
+            return fp, "フロア（最安 $%.2f の次・2番目 $%.2f より安い）" % (L, L2), fp
+        return None, "見送り：フロア $%.2f では最安か2番目に入れない（%s）" % (fp, ("2番目 $%.2f" % L2) if L2 else "最安 $%.2f・2番目なし" % L), fp
     if L2 and fp <= L2 * (1 + qs["tol"]):
         return fp, "フロア（2番目 $%.2f ＋%d%%以内）" % (L2, round(qs["tol"] * 100)), fp
     if qs.get("textbook"):   # 11/21 12:35 オーナー「教科書通りやって」：フロアは2番目＋許容幅（教科書 10%）の中だけ。相場の真ん中・1.4倍の線は使わない
