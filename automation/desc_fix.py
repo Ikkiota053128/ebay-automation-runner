@@ -62,6 +62,8 @@ def build(o, item, r):
              "FUNC": "New item." if new else "Please see the notes below and the photos.",
              "INCLUDED": "Only the items in the photos"}
         t = text_of(old)
+        skip = re.compile(r"^(OTA JAPAN GEAR.*|✈.*|CONDITION|SHIPS IN|RETURNS|60 days, free|\d+ business days|◆.*|New|Used|Rank [A-Z]+)$")
+        t = "\n".join(x for x in t.splitlines() if x and x != title and not skip.match(x))
         extra = ""
         if t:   # 前の説明の文を残す（品ごとの大事な説明を消さない）
             extra = ('<div style="background:#ffffff;border:1px solid #f1dcc0;border-left:5px solid #13294b;border-radius:12px;'
@@ -70,8 +72,13 @@ def build(o, item, r):
     h = TPL
     for k, x in [("TITLE", title)] + list(d.items()):
         h = h.replace("{{%s}}" % k, esc(x) if k != "TITLE" else esc(x))
-    if "10 business days" in old or re.search(r"netmall\.hardoff\.co\.jp|ec\.treasure-f\.com", r.get("仕入元URL", "")):
-        h = h.replace("3 business days", "10 business days")
+    # 発送日数は前の説明に書いてあった日数のまま（品ごとの配送ポリシーに合わせる）
+    m = re.search(r"(\d+)\s*(?:<[^>]+>\s*)*business days", old)
+    days = m.group(1) if m else ("10" if re.search(r"netmall\.hardoff\.co\.jp|ec\.treasure-f\.com", r.get("仕入元URL", "")) else "3")
+    h = h.replace("3 business days", "%s business days" % days)
+    if "FedEx" not in old:   # FedEx 以外で送る品（前の説明に FedEx が無い）は、FedEx と書かない
+        h = (h.replace("by <b>FedEx</b> with tracking", "with tracking").replace("FedEx from Japan", "shipping from Japan")
+               .replace("Tracked FedEx", "Tracked shipping"))
     if extra:
         mark = '<div style="background:#ffffff;border:1px solid #f1dcc0;border-left:5px solid #13294b;border-radius:12px;padding:14px 16px;margin:0 0 16px 0;"><div style="font-size:19px;font-weight:bold;color:#13294b;margin-bottom:6px;">About This Item'
         h = h.replace(mark, extra + mark, 1)
