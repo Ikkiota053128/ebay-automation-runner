@@ -261,6 +261,12 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
             return model
         if v == "{接続}":   # 11/23：ヘッドホンの Connectivity（必ず入れる項目）
             return "Wireless" if re.search(r"TW|BT|Bluetooth|Wireless|ワイヤレス", "%s %s" % (model, c.get("title", "")), re.I) else "Wired"
+        if v == "{色}":   # 11/23：ヘッドホンの Color（必ず入れる項目）。商品名に色が1つだけのときだけ
+            from title_make import colors_in
+            cs = colors_in(c.get("title", ""))
+            if len(cs) != 1:
+                raise RuntimeError("色が商品名から分からない（ヘッドホンは色が必ず要る）")
+            return cs.pop()
         return v
     asp = [["Brand", brand], ["Model", model]] + [[k, aval(k)] for k in kind["項目"]] + \
           [["Shipping Method", "FedEx International Connect Plus (tracked)"]]

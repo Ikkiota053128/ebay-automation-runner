@@ -70,3 +70,17 @@ def build(brand, model, kind_word, cond, cn, src=""):
         if len(t) + 1 + len(p) <= 80:
             t += " " + p
     return t[:80]
+
+
+COLORS = [("ブラック|黒", "Black"), ("ホワイト|白", "White"), ("シルバー|銀", "Silver"), ("ゴールド|金色", "Gold"), ("レッド|赤", "Red"),
+          ("ブルー|青", "Blue"), ("ネイビー|紺", "Blue"), ("グリーン|緑", "Green"), ("イエロー|黄", "Yellow"), ("ピンク", "Pink"),
+          ("オレンジ", "Orange"), ("ブラウン|茶", "Brown"), ("グレー|灰", "Gray"), ("パープル|紫", "Purple"), ("ベージュ", "Beige")]
+
+
+def colors_in(t):
+    """商品名の色（日本語・英語）"""
+    import unicodedata
+    t = unicodedata.normalize("NFKC", t or "")
+    found = {en for rx, en in COLORS if re.search(rx, t)}
+    found |= {en for _, en in COLORS if re.search(r"\b%s\b" % en, t, re.I)}
+    return found
