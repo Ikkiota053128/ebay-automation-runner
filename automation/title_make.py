@@ -67,6 +67,8 @@ def build(brand, model, kind_word, cond, cn, src=""):
     parts += acc
     t = head
     for p in parts + ["From Japan"]:
+        if p.lower() in t.lower():   # 同じ言葉を2回書かない（w/ Box … w/ Box など）
+            continue
         if len(t) + 1 + len(p) <= 80:
             t += " " + p
     return t[:80]

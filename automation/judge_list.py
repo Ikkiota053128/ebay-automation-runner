@@ -244,7 +244,9 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
         import title_make
         if not title_make.check_model(model, c.get("title", ""), cn.get("_src", "")):
             raise RuntimeError("型番が仕入れ先の商品名・説明と合わない（%s）" % model)
-        title = title_make.build(brand, model, kind["言葉"], cond, cn, cn.get("_src", "") + c.get("title", ""))
+        # 11/23 20:40：状態と付属品は仕入れ先の「商品名」だけから（店のページの説明にはランクの一覧表や「ジャンク」の案内があり、まちがえる）
+        nm = c.get("title", "")
+        title = title_make.build(brand, model, kind["言葉"], cond, cond_note.notes("", nm), nm)
     func = "New item." if cond < 3000 else (cn["func"] or "Not tested. Please check the photos.")
     nts = [] if cond < 3000 else cn["notes"]
     def esc(x):
