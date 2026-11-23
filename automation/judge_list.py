@@ -243,7 +243,8 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
             .replace("{{FUNC}}", esc(func))
             .replace("{{NOTES}}", esc("; ".join(nts)) if nts else "Please check the photos.")
             .replace("{{INCLUDED}}", esc(cn["box"]) if cn.get("box") else "Only the items in the photos"))
-    asp = [["Brand", brand], ["Model", model]] + [[k, "Does not apply"] for k in kind["項目"]] + \
+    vals = kind.get("項目の値") or {}
+    asp = [["Brand", brand], ["Model", model]] + [[k, (model if vals.get(k) == "{型番}" else vals.get(k, "Does not apply"))] for k in kind["項目"]] + \
           [["Shipping Method", "FedEx International Connect Plus (tracked)"]]
     w, (l, wd, h) = kind["重さ_g"], sorted([float(x) for x in kind["箱"].split("x")], reverse=True)
     pol = dict(kind.get("ポリシー") or {})
@@ -398,6 +399,7 @@ def main():
         write_run(NAME, True, 0, 0)
         return 0
     kinds = load_json(os.path.join(ROOT, "data", "判定", "種類.json"), {})
+    new_cat = load_json(os.path.join(ROOT, "data", "判定", "新しいカテゴリの出品.json"), {})
     st = load_json(os.path.join(ROOT, "data", "判定", "送料表.json"), {})
     qs = {"floorYen": 1500, "floorRate": 0.05, "tol": 0.30, "high": 100, "overMax": 1.4}
     qs.update(cfg.get("判定", {}).get("値付け", {}))
@@ -498,7 +500,17 @@ def main():
                     continue
                 cc = collections.Counter(cats).most_common(1)
                 cat = cc[0][0] if cc and cc[0][1] * 2 >= len(cats) else ""
-                kind = kinds.get(cat) or auto_kind(cat, kinds)
+                # 11/23 19:07 オーナー「1〜3やって」：①まちがったカテゴリの直し（ビデオカメラがアニメのグッズに出る など）③店に合わないカテゴリは見送り
+                skip_cat = False
+                fx = (tt.get("カテゴリの直し") or {}).get(cat)
+                if fx:
+                    if re.search(fx["型番の形"], "%s %s" % (c.get("型番", ""), c.get("name", "")), re.I):
+                        cat = fx["先"]
+                    else:
+                        skip_cat = True
+                if cat in set(tt.get("見送りのカテゴリ") or []):
+                    skip_cat = True
+                kind = None if skip_cat else (kinds.get(cat) or auto_kind(cat, kinds))
                 r.update(競合の数=len(act), 競合=act[:5], カテゴリ=cat)
                 if len(act) < int(tt.get("競合の最低件数", 1)):   # 11/20 9:41 オーナー「A→Bでお願い」：競合1件でも、その値段とフロアで値付けする（前は2件未満を GAS へ）
                     r.update(結論="見送り", 理由="eBayに同じ型番の競合が無い（相場と比べられない）")
@@ -506,8 +518,12 @@ def main():
                     r.update(結論="見送り", 理由="仕入値が相場の中央値の%d割を超える（教科書 第21章）" % round(float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * 10))
                 elif c["price"] < 0.2 * act[0] * 152:
                     r.update(結論="見送り", 理由="仕入値がeBayの最安の2割未満（付属品・別物の疑い）")
+                elif skip_cat:
+                    r.update(結論="見送り", 理由="店に合わないカテゴリ（%s %s）" % (cat, judge.CAT_NAMES.get(cat, "")))
                 elif not kind:
                     r.update(結論="GASへ", 理由="決めてある種類のカテゴリではない（%s）" % (cat or "多数決できない"))
+                elif kind.get("新しい") and new_cat.get(cat, 0) >= int(tt.get("新しいカテゴリのカナリア_件", 2)):
+                    r.update(結論="GO（後回し）", 理由="新しいカテゴリのカナリア（%s）はオーナーが見てから" % kind["名前"])
                 else:
                     ship = judge.ship_fedex(kind["重さ_g"], kind["箱"], st["FedEx"])
                     d = {"cost": c["price"], "dom": c.get("dom", 2000), "ship": ship, "fee": kind.get("手数料率", 0.1742),
@@ -528,6 +544,9 @@ def main():
                         else:
                             r.update(結論="GO")
                             live_models.append(k)
+                            if kind.get("新しい"):
+                                new_cat[cat] = new_cat.get(cat, 0) + 1
+                                save_json(os.path.join(ROOT, "data", "判定", "新しいカテゴリの出品.json"), new_cat)
                             mid = (re.search(r"mercari\.com/item/(m\d+)", c["url"]) or [None, ""])[1]
                             # 11/21 19:04 オーナー「…私のショップもやって！規約は承知済み」：メルカリも自動で出す（1日の上限 時刻表 メルカリの自動出品_1日）。
                             # 上限を超えた品だけ、今までどおり「GO確認待ち」
