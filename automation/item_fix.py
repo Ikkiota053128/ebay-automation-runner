@@ -88,6 +88,7 @@ def main():
     res = load_json(RP, {"品": {}})
     done = res.setdefault("品", {})
     titles = dict(cfg.get("タイトル") or {})
+    cats = dict(cfg.get("カテゴリ") or {})   # 11/23 21:15 オーナー「AとB」：カテゴリのまちがいを直す（{SKU: カテゴリID}）
     aspects = {k: dict(v) for k, v in (cfg.get("項目") or {}).items()}
     n_make = int(cfg.get("腕時計の項目を作る") or 0)
     if n_make:
@@ -137,7 +138,7 @@ def main():
     out = {"時刻": jst(), "本番": live, "直した": [], "失敗": [], "案": {}}
     import time as _t
     t_end = _t.time() + 60 * float(cfg.get("時間の上限_分", 22))   # workflow の30分で切られないように、時間で区切って次の回へ
-    for sku in list(dict.fromkeys(list(titles) + list(aspects))):
+    for sku in list(dict.fromkeys(list(titles) + list(aspects) + list(cats))):
         if _t.time() > t_end:
             out["時間切れ"] = True
             break
@@ -152,9 +153,9 @@ def main():
         p = it.setdefault("product", {})
         old_t = p.get("title", "")
         asp = p.setdefault("aspects", {})
-        add = {k: v for k, v in (aspects.get(sku) or {}).items() if not asp.get(k)}
+        add = {k: v for k, v in (aspects.get(sku) or {}).items() if not asp.get(k) or asp.get(k) == ["Does not apply"]}
         new_t = titles.get(sku, old_t)[:80]
-        out["案"][sku] = {"タイトル": [old_t, new_t] if new_t != old_t else None, "足す項目": add}
+        out["案"][sku] = {"タイトル": [old_t, new_t] if new_t != old_t else None, "足す項目": add, "カテゴリ": cats.get(sku)}
         if not live:
             continue
         p["title"] = new_t
@@ -169,6 +170,16 @@ def main():
             eb.call("PUT", "/sell/inventory/v1/inventory_item/" + urllib.parse.quote(sku, safe=""), body, headers=CL)
             chk = eb.inventory_item(sku).get("product") or {}
             ok = chk.get("title") == new_t and all(chk.get("aspects", {}).get(k) == v for k, v in add.items())
+            if ok and cats.get(sku):
+                offs = [o for o in eb.offers_of(sku) if o.get("status") == "PUBLISHED"]
+                if not offs:
+                    raise EbayError(0, {"message": "公開中のオファーが無い"})
+                o = dict(offs[0])
+                oid = o.pop("offerId")
+                o.pop("status", None); o.pop("listing", None)
+                o["categoryId"] = str(cats[sku])
+                eb.call("PUT", "/sell/inventory/v1/offer/" + oid, o, headers=CL)
+                ok = str([x for x in eb.offers_of(sku) if x.get("offerId") == oid][0].get("categoryId")) == str(cats[sku])
         except EbayError as e:
             ok = False
             out["失敗"].append({"SKU": sku, "エラー": err_text(e)})
@@ -186,6 +197,7 @@ def main():
         cfg["本番"] = bool(out.get("時間切れ"))   # 時間切れなら、残りを次の回も本番で続ける
         cfg["タイトル"] = {k: v for k, v in titles.items() if k not in out["直した"]}
         cfg["項目"] = {k: v for k, v in aspects.items() if k not in out["直した"]}
+        cfg["カテゴリ"] = {k: v for k, v in cats.items() if k not in out["直した"]}
         save_json(P, cfg)
     save_json(RP, dict(res, 最後=out))
     print("本番" if live else "ドライラン", "案", len(out["案"]), "直した", len(out["直した"]), "失敗", len(out["失敗"]))

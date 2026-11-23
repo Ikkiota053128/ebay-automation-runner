@@ -112,6 +112,8 @@ for r in rows:
     if len(out["直した"]) + len(out["予定"]) >= n_max:
         break
     sku = r["SKU"]
+    if sku in set(cfg.get("除く") or []):   # カテゴリのまちがいの品は、カテゴリを直してから
+        continue
     d0 = done.get(sku, {})
     if d0.get("直した日時") or d0.get("失敗", 0) >= 2 or (d0.get("足すものなし") and live):
         continue
