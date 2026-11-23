@@ -223,6 +223,9 @@ def more_photos(c):
         return ph
 
 
+tt_title = {}
+
+
 def make_payload(c, kind, cat, cond, price, fp, ship, sku):
     brand, model = brand_of(c["メーカー"]), c["型番"]
     cw = "New" if cond < 3000 else "Used"
@@ -231,9 +234,17 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
     # 11/21 13:07 オーナー「1と3」：仕入れ先の状態の説明を読んで英語の「Condition notes」にし、eBay の状態の説明の欄にも入れる
     try:
         import cond_note
-        cn = cond_note.for_item(c)
+        _src = cond_note.source_text(c)
+        cn = cond_note.notes(_src, c.get("title", ""))
+        cn["_src"] = _src
     except Exception:
         cn = {"notes": [], "func": "", "box": ""}
+    # 11/23 19:26 オーナー「OK」：タイトルを教科書の形に（ブランド＋型番＋種類＋状態＋付属品＋From Japan・80文字まで）・型番を仕入れ先と照合
+    if tt_title.get("教科書のタイトル"):
+        import title_make
+        if not title_make.check_model(model, c.get("title", ""), cn.get("_src", "")):
+            raise RuntimeError("型番が仕入れ先の商品名・説明と合わない（%s）" % model)
+        title = title_make.build(brand, model, kind["言葉"], cond, cn, cn.get("_src", "") + c.get("title", ""))
     func = "New item." if cond < 3000 else (cn["func"] or "Not tested. Please check the photos.")
     nts = [] if cond < 3000 else cn["notes"]
     def esc(x):
@@ -353,6 +364,7 @@ def withdraw_asked(eb, live):
 
 def main():
     cfg, tt = settings(), timetable(NAME)
+    tt_title.update(tt)
     t_bright_end = time.time() + 60 * float(tt.get("写真を明るくする時間_分", 12))   # 30分で切られないよう、補正は始めてから12分まで
     live = bool(tt.get("実行"))
     mark_started(NAME)
