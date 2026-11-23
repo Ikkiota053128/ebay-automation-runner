@@ -23,7 +23,7 @@ HD = {"X-EBAY-C-MARKETPLACE-ID": "EBAY_US", "X-EBAY-C-ENDUSERCTX": "contextualLo
 SKIP_ASPECT = re.compile(r"colou?r|condition|box|packag|paper|bundle|includ|accessor|warrant|year|vintage|modif|custom|person|sign|handmade|"
                          r"country|region|prop 65|unit|ship|seller|band|strap|lug|weight|height|length|width|serial|upc|ean|isbn|^mpn$|^model$|"
                          r"^brand$|department|gender|style|theme|character|occasion|pattern|sport|label|certif|service|return|reference|"
-                         r"original|reproduction|kit|cable|charger|battery included|item type|signed|autograph|franchise|tv|movie|video game", re.I)
+                         r"original|reproduction|kit|manual|booklet|closure|handed|cable|charger|battery included|item type|signed|autograph|franchise|tv|movie|video game", re.I)
 # タイトルに足してよい仕様の言葉（競合2品以上が使っているときだけ）
 WORDS = ["Tough Solar", "Solar", "Radio", "Atomic", "Multiband 6", "Multiband", "Bluetooth", "Waterproof", "Shockproof", "Digital", "Analog",
          "Ana-Digi", "Quartz", "Automatic", "Mechanical", "Chronograph", "Diver", "Titanium", "Stainless Steel", "World Time", "Alarm",
@@ -32,6 +32,7 @@ WORDS = ["Tough Solar", "Solar", "Radio", "Atomic", "Multiband 6", "Multiband", 
          "Wah", "Equalizer", "Noise Cancelling", "Wireless", "Hi-Res", "Stereo", "Portable", "Rechargeable", "Full HD", "4K", "HD",
          "35mm", "Instant", "Underwater", "Speedlite", "Pancake", "Standard", "Fisheye", "Vari-Angle", "Wi-Fi", "GPS", "Touchscreen"]
 PAT = [r"\d{1,2}(\.\d)?\s?MP", r"\d{1,2}(\.\d)?x(?= )", r"\d{1,3}-\d{1,3}mm", r"\d{1,3}mm"]
+PARTS = re.compile(r"\bspool\b|\bhandle\b|\bknob\b|box only|manual only|case only|lens cap|replacement|\bparts?\b|for repair", re.I)   # 部品・付属品だけの出品
 CONFLICT = {"Movement": ["Solar", "Tough Solar", "Quartz", "Automatic", "Mechanical"], "Display": ["Digital", "Analog", "Ana-Digi"]}
 
 
@@ -71,7 +72,7 @@ def comps(eb, brand, model, cat, me, my_ids):
         if (it.get("seller") or {}).get("username", "").lower() == me or str(it.get("legacyItemId", "")) in my_ids:
             continue
         t = it.get("title", "")
-        if not rx.search(t.upper()) or judge.JUNK.search(t) or judge.is_acc(t, model):
+        if not rx.search(t.upper()) or judge.JUNK.search(t) or judge.is_acc(t, model) or PARTS.search(t):
             continue
         out.append(it)
     return out[:4]
@@ -160,8 +161,13 @@ def main():
                     vals[k].append(v)
                 time.sleep(0.3)
             add = {}
+            lens = "lens" in title.lower()
             for name, m in meta.items():
                 if SKIP_ASPECT.search(name) or name not in vals:
+                    continue
+                if not lens and re.search(r"focal|aperture", name, re.I):   # 本体にセットのレンズの値を入れない
+                    continue
+                if re.search(r"spool|part|accessor", " ".join(x for lst in vals[name] for x in lst), re.I):
                     continue
                 cur = [v for v in (asp.get(name) or []) if v and v != "Does not apply"]
                 if cur:
@@ -212,6 +218,8 @@ def main():
                     continue
                 if not film and "camera" in kind.lower() and w in ("35mm", "slr", "rangefinder"):
                     continue
+                if re.search(r"\d+mm$", w) and not ("lens" in kind.lower() or (film and w == "35mm")):
+                    continue   # セットのレンズの長さは足さない
                 if re.match(r"^\d", w):
                     word = w.replace("mp", "MP")
                 new_words.append(word)
