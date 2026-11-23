@@ -41,7 +41,7 @@ def cond_word(cond, cn, src=""):
 SERIES = [(r"^Casio$", r"^EX-", "Exilim"), (r"^Casio$", r"^(GA|GW|GST|GMW|DW|GD|GBD|GM|GBA|GR|GG|MTG|MRG|GPR|GWG|GWF|GN|GLX)-", "G-Shock"),
           (r"^Casio$", r"^(BA|BGA|BG|MSG|BGD)-", "Baby-G"), (r"^Panasonic$", r"^DMC-|^DC-", "Lumix"),
           (r"^Sony$", r"^DSC-", "Cyber-shot"), (r"^Sony$", r"^WM-", "Walkman"), (r"^Sony$", r"^MZ-", "MiniDisc Walkman"),
-          (r"^Sony$", r"^(HDR|FDR|DCR)-", "Handycam"), (r"^Canon$", r"^IXY", "IXUS ELPH"), (r"^Nikon$", r"^(COOLPIX|S\d|L\d|P\d)", "Coolpix"),
+          (r"^Sony$", r"^(HDR|FDR|DCR)-", "Handycam"), (r"^Canon$", r"^IXY", "IXUS ELPH"), (r"^Nikon$", r"^(COOLPIX|S\d{3,4}|P\d{3,4}|W\d{3})", "Coolpix"),
           (r"^Fujifilm$|^Fuji$", r"^(XP|F|Z|J|S)\d", "FinePix"), (r"^Olympus$", r"^TG-", "Tough"),
           (r"^Pentax$", r"^(WG|Optio)", "Optio")]
 
