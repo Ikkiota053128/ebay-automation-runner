@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: write
 concurrency:
   group: ledger-order_notify
   cancel-in-progress: false
@@ -56,3 +57,12 @@ jobs:
             git rebase --abort 2>/dev/null; git pull -q --rebase -X theirs origin main && git push -q && exit 0; git rebase --abort 2>/dev/null; sleep 5
           done
           echo "保存に失敗"; exit 1
+      - name: 売れたらすぐ仕入れ先を見る（在庫の監視・メルカリの見回りを動かす）
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f "${{ runner.temp }}/new_sold" ]; then
+            gh workflow run stock_watch.yml -R ${{ github.repository }} || true
+            gh workflow run mercari_watch.yml -R ${{ github.repository }} || true
+          fi

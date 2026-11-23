@@ -123,6 +123,13 @@ def main():
             sent[key] = jst()
     if rows:
         save_ledger(rows, ["状態"], NAME)
+    if new:   # 11/24 08:54 オーナー「1〜3やって」：売れたらすぐ仕入れ先を見る（在庫の監視・メルカリの見回りをすぐ動かす）
+        qp = os.path.join(ROOT, "data", "判定", "売れたらすぐ見る.json")
+        q = load_json(qp, {"待ち": []})
+        q["待ち"] = list(dict.fromkeys(q.get("待ち", []) + [it["SKU"] for it in new if it["SKU"]]))
+        save_json(qp, q)
+        if os.environ.get("RUNNER_TEMP"):
+            open(os.path.join(os.environ["RUNNER_TEMP"], "new_sold"), "w").write("1")
     msgs = []
     for it in new:
         r = led.get(it["SKU"]) or {}

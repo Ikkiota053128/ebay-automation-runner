@@ -5,7 +5,7 @@ name: メルカリの見回り
 on:
   workflow_dispatch:
   schedule:
-    - cron: "27 1,5,9,13 * * *"   # 日本時間 10:27・14:27・18:27・22:27
+    - cron: "27 */2 * * *"   # 2時間おき（日本時間 9:27・11:27・…・7:27）
 permissions:
   contents: read
 concurrency:
