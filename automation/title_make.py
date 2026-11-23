@@ -37,17 +37,34 @@ def cond_word(cond, cn, src=""):
     return "Used"
 
 
+# 型番の頭からはっきり分かるシリーズ名（買い手が検索する名前）
+SERIES = [(r"^Casio$", r"^EX-", "Exilim"), (r"^Casio$", r"^(GA|GW|GST|GMW|DW|GD|GBD|GM|GBA|GR|GG|MTG|MRG|GPR|GWG|GWF|GN|GLX)-", "G-Shock"),
+          (r"^Casio$", r"^(BA|BGA|BG|MSG|BGD)-", "Baby-G"), (r"^Panasonic$", r"^DMC-|^DC-", "Lumix"),
+          (r"^Sony$", r"^DSC-", "Cyber-shot"), (r"^Sony$", r"^WM-", "Walkman"), (r"^Sony$", r"^MZ-", "MiniDisc Walkman"),
+          (r"^Sony$", r"^(HDR|FDR|DCR)-", "Handycam"), (r"^Canon$", r"^IXY", "IXUS ELPH"), (r"^Nikon$", r"^(COOLPIX|S\d|L\d|P\d)", "Coolpix"),
+          (r"^Fujifilm$|^Fuji$", r"^(XP|F|Z|J|S)\d", "FinePix"), (r"^Olympus$", r"^(FE|SZ|TG|SH|VR|XZ)-", "Olympus Digital"),
+          (r"^Pentax$", r"^(WG|Optio)", "Optio")]
+
+
+def series(brand, model, kind_word):
+    for b, m, w in SERIES:
+        if re.search(b, brand or "", re.I) and re.search(m, model or "", re.I) and w.lower() not in (kind_word or "").lower():
+            return w
+    return ""
+
+
 ACC = [("Body only", "Body Only"), ("Box", "w/ Box"), ("Charger", "w/ Charger"), ("Manual", "w/ Manual"),
        ("Case", "w/ Case"), ("Strap", "w/ Strap"), ("Cap", "w/ Cap")]
 
 
 def build(brand, model, kind_word, cond, cn, src=""):
-    head = re.sub(r"\s+", " ", "%s %s %s" % (brand, model, kind_word)).strip()
+    head = re.sub(r"\s+", " ", "%s %s %s %s" % (brand, model, series(brand, model, kind_word), kind_word)).strip()
     parts = [cond_word(cond, cn, src)]
     box = cn.get("box") or ""
-    for key, word in ACC:
-        if key in box:
-            parts.append(word)
+    acc = [word for key, word in ACC if key in box and key != "Body only"]
+    if "Body only" in box and not acc:
+        acc = ["Body Only"]   # 付属品が何も無いときだけ（「本体のみ」と「充電器付き」が両方は書かない）
+    parts += acc
     t = head
     for p in parts + ["From Japan"]:
         if len(t) + 1 + len(p) <= 80:

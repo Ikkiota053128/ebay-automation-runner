@@ -51,7 +51,7 @@ def photos_of(c):
 
 
 BAD_CAT = re.compile(r"part|accessor|case|bag|strap|cable|charger|battery|book|manual|video game|game|toy|figure|doll|card|"
-                     r"amplifier|speaker|furniture|guitar$|bass$|drum|keyboard|piano|tripod|stand", re.I)
+                     r"amplifier|speaker|furniture|guitar$|bass$|drum|keyboard|piano|tripod|stand|autres|sonstiges|animation|automation|bicycle|cycling", re.I)
 
 
 def auto_kind(cat, kinds):
@@ -255,7 +255,14 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
             .replace("{{NOTES}}", esc("; ".join(nts)) if nts else "Please check the photos.")
             .replace("{{INCLUDED}}", esc(cn["box"]) if cn.get("box") else "Only the items in the photos"))
     vals = kind.get("項目の値") or {}
-    asp = [["Brand", brand], ["Model", model]] + [[k, (model if vals.get(k) == "{型番}" else vals.get(k, "Does not apply"))] for k in kind["項目"]] + \
+    def aval(k):
+        v = vals.get(k, "Does not apply")
+        if v == "{型番}":
+            return model
+        if v == "{接続}":   # 11/23：ヘッドホンの Connectivity（必ず入れる項目）
+            return "Wireless" if re.search(r"TW|BT|Bluetooth|Wireless|ワイヤレス", "%s %s" % (model, c.get("title", "")), re.I) else "Wired"
+        return v
+    asp = [["Brand", brand], ["Model", model]] + [[k, aval(k)] for k in kind["項目"]] + \
           [["Shipping Method", "FedEx International Connect Plus (tracked)"]]
     w, (l, wd, h) = kind["重さ_g"], sorted([float(x) for x in kind["箱"].split("x")], reverse=True)
     pol = dict(kind.get("ポリシー") or {})
