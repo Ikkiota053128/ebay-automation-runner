@@ -37,7 +37,8 @@ def facts(title, model, src_name, src):
     cs = colors_in(t_name)   # 色は商品名だけから（説明はほかの色の話が混ざる）。1色だけのとき
     if len(cs) == 1:
         c = cs.pop()
-        for k in ("Color", "Case Color", "Dial Color", "Body Color", "Exterior Color"):
+        watch = re.search(r"watch|腕時計", t_name, re.I)
+        for k in (("Dial Color",) if watch else ("Color", "Body Color", "Exterior Color")):   # 時計の名前の色は文字盤の色のことが多い
             f[k] = c
     if re.search(r"ソーラー|タフソーラー|solar", t_all, re.I):
         f["Movement"] = "Solar"
@@ -56,7 +57,7 @@ def facts(title, model, src_name, src):
     feats = []
     if re.search(r"電波", t_all):
         feats.append("Radio Controlled")
-    if re.search(r"\d+\s*(気圧|BAR|bar|m防水|M防水)|防水", t_all):
+    if re.search(r"\d+\s*(気圧|BAR|bar|m防水|M防水)|\d+\s*m\s*water", t_all, re.I):   # 数字つきの防水だけ
         feats.append("Water Resistant")
     if re.search(r"Bluetooth|ブルートゥース", t_all, re.I):
         feats.append("Bluetooth")
@@ -66,18 +67,10 @@ def facts(title, model, src_name, src):
         f["Connectivity"] = "Bluetooth"
     elif re.search(r"ワイヤレス|wireless", t_name, re.I):
         f["Connectivity"] = "Wireless"
-    m = re.search(r"光学\s*(\d{1,2}(?:\.\d)?)\s*倍|(\d{1,2}(?:\.\d)?)\s*x\s*optical", t_all, re.I)
-    if m:
-        f["Optical Zoom"] = "%sx" % (m.group(1) or m.group(2))
-    m = re.search(r"(\d{3,4})\s*万画素", t_all)
-    if m:
-        f["Maximum Resolution"] = "%s MP" % ("%g" % (int(m.group(1)) / 100))
-    m = re.search(r"(\d{1,2}\.\d)\s*(?:型|インチ)\s*(?:液晶|モニター|LCD)?", t_all)
-    if m:
-        f["Screen Size"] = '%s"' % m.group(1)
+    # ズーム・画素数・液晶の大きさは、説明文のほかの数字を拾ってまちがえることがあるので入れない（ドライランで分かった）
     if re.search(r"フィルムカメラ|film camera|35mm", t_all, re.I):
         f["Film Format"] = "35mm"
-    if model:
+    if model and model.lower() not in ("does not apply", "n/a", "na", "unknown") and re.search(r"\d", model) and not re.match(r"(?i)gen\s*\d", model):
         f["MPN"] = model
     return f
 

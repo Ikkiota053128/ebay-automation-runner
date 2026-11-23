@@ -42,7 +42,7 @@ SERIES = [(r"^Casio$", r"^EX-", "Exilim"), (r"^Casio$", r"^(GA|GW|GST|GMW|DW|GD|
           (r"^Casio$", r"^(BA|BGA|BG|MSG|BGD)-", "Baby-G"), (r"^Panasonic$", r"^DMC-|^DC-", "Lumix"),
           (r"^Sony$", r"^DSC-", "Cyber-shot"), (r"^Sony$", r"^WM-", "Walkman"), (r"^Sony$", r"^MZ-", "MiniDisc Walkman"),
           (r"^Sony$", r"^(HDR|FDR|DCR)-", "Handycam"), (r"^Canon$", r"^IXY", "IXUS ELPH"), (r"^Nikon$", r"^(COOLPIX|S\d|L\d|P\d)", "Coolpix"),
-          (r"^Fujifilm$|^Fuji$", r"^(XP|F|Z|J|S)\d", "FinePix"), (r"^Olympus$", r"^(FE|SZ|TG|SH|VR|XZ)-", "Olympus Digital"),
+          (r"^Fujifilm$|^Fuji$", r"^(XP|F|Z|J|S)\d", "FinePix"), (r"^Olympus$", r"^TG-", "Tough"),
           (r"^Pentax$", r"^(WG|Optio)", "Optio")]
 
 
