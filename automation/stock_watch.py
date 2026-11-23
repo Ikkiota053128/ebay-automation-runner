@@ -247,7 +247,7 @@ def main():
     # 予備の仕入れ先（GAS の ysBackup_ と同じ考え方）：仕入元で売り切れた品は、楽天・Yahoo!ショッピングで同じ型番の在庫ありの品を探す。
     # 仕入値が前の仕入値以下（＝利益が減らない）で、商品名に型番がはっきりある品が見つかれば、仕入元を付け替えて在庫を0にしない
     switched = []
-    if zero:
+    if zero and tt.get("予備の仕入れ先", False):   # 11/24 06:48 オーナー「至急1〜4やって」：香水を SP-1 とまちがえた事故で止めた（時刻表 在庫の監視 → 予備の仕入れ先）
         try:
             from price_adjust import model_of
             from shop_sweep import rakuten, yahoo, keep

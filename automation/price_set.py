@@ -22,6 +22,8 @@ for r in rows:
         old = num(o["pricingSummary"]["price"]["value"])
         if old is not None and price >= old:
             raise EbayError(0, {"raw": "今の値段 $%.2f より安くない" % old})
+        if old is not None and price < old * 0.7:   # 11/24 06:48 オーナー「至急1〜4やって」：1回で30%より大きい値下げはしない
+            raise EbayError(0, {"raw": "大きすぎる値下げ（$%.2f → $%.2f）なので止めた" % (old, price)})
         o["pricingSummary"]["price"] = {"value": "%.2f" % price, "currency": "USD"}
         pol = o.get("listingPolicies") or {}
         if fp + 0.01 < price:

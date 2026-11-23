@@ -123,11 +123,16 @@ def decide(row, price, floor, age, comp, cfg):
         return "値上げ（赤字）", floor
     if age is not None and age >= end_d:
         return "出品を終える（%d日売れない）" % age, None
+    big = float(cfg.get("_1回に下げる割合の上限", 0.3))   # 11/24 06:48 オーナー「至急1〜4やって」：1回で30%より大きい値下げは自動でしない（$858.99→$85.44 の事故）
     if age is not None and age >= lower_d and price > floor + 0.004:
+        if floor < price * (1 - big):
+            return "要確認（大きすぎる値下げ %d%%）" % round((1 - floor / price) * 100), None
         return "値下げ（%d日売れない）" % age, floor
     if comp:
         step = cfg.get("プログラムの数字_キット⑨⑩⑪", {}).get("値下げ_最安からいくら下げるか_ドル", 1.0)
         new = round(max(floor, comp - step), 2)
+        if new < price * (1 - big):
+            return "要確認（大きすぎる値下げ %d%%）" % round((1 - new / price) * 100), None
         if new < price - 0.004:
             return "値下げ（最安−$%g）" % step if new > floor else "値下げ（最低利益まで）", new
     return "変更なし", None
@@ -239,10 +244,13 @@ def main():
     downs = [p for p in changes if p["判定"].startswith("値下げ")]
     downs = downs[: max(0, int(tt.get("1回に値段を変える上限_件", 50)) - len(ups))]
     todo = ups + ends + downs
+    bigs = [p for p in changes if p["判定"].startswith("要確認")]
     rec_dir = os.path.join(ROOT, "data", "値段の調整")
     stamp = now().strftime("%Y%m%d_%H%M")
     msg = ["【値段の調整】%s %s：見た %d品・案 %d件（値上げ %d・終える %d・値下げ %d）" %
            (jst(), "本番" if live else "ドライラン", len(plan), len(todo), len(ups), len(ends), len(downs))]
+    if bigs:
+        msg.append("大きすぎる値下げで止めた（オーナーが確かめる）%d品：%s" % (len(bigs), ", ".join("%s $%s %s" % (p["SKU"], p["今$"], p["判定"]) for p in bigs[:10])))
     if noformula:
         msg.append("最低利益の値段が出せない品 %d件（台帳に仕入値・送料・手数料率・関税率が無い）：%s" % (len(noformula), ", ".join(noformula[:10])))
     for s, e in errs[:5]:
