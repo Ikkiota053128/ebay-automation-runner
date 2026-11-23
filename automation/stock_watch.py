@@ -44,7 +44,7 @@ def _rk_call(q, relay, acc, tok):
                 time.sleep(6 * (k + 1))
                 continue
             try:
-                body = e.read().decode("utf-8", "replace")[:120]
+                body = e.read().decode("utf-8", "replace")[:600]
             except Exception:
                 body = ""
             return None, "楽天API HTTP %s %s" % (e.code, body)
