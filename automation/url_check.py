@@ -5,7 +5,7 @@
 - 結果：合う／合わない（型番が無い）／読めない（エラーの全文）／対象外（メルカリ・Amazon・URLなし）。
 - メルカリ・Amazon のページは開かない。同じサイトは3秒以上あける。
 - 結果は data/判定/URLの点検.json。台帳・eBay は変えない。"""
-import os, re, sys, time, unicodedata
+import json, os, re, sys, time, unicodedata
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, jst, save_json, read_ledger
 from stock_watch import fetch, _rk_call, _rk_norm
@@ -13,6 +13,7 @@ from price_adjust import model_of
 from title_make import norm
 
 RP = os.path.join(ROOT, "data", "判定", "URLの点検.json")
+TITLE = {}
 T_END = time.time() + 60 * 25
 
 
@@ -29,12 +30,14 @@ def rakuten_name(url):
     q = {"format": "json", "formatVersion": 2, "applicationId": rid, "availability": 0, "itemCode": "%s:%s" % key, "hits": 1}
     req_q = dict(q)
     j, err = _rk_call(req_q, relay, acc, tok)
-    if err:
-        return None, err + " ／ 送った itemCode=%s:%s" % key
     for it in (j or {}).get("items") or (j or {}).get("Items") or []:
         it = it.get("Item", it)
         return "%s\n%s" % (it.get("itemName", ""), (it.get("itemCaption", "") or "")[:3000]), ""
-    return None, "楽天API：0件（商品が消えた可能性）"
+    from stock_watch import rakuten_item   # URLの文字と itemCode がちがう店：在庫の監視と同じく「店＋型番」「店の新着」で探す
+    it = rakuten_item(url, TITLE.get(url, ""))
+    if it:
+        return "%s\n%s" % (it.get("itemName", ""), (it.get("itemCaption", "") or "")[:3000]), ""
+    return None, (err + " ／ 送った itemCode=%s:%s ／ 店＋型番・店の新着でも見つからない" % key) if err else "楽天API：0件・店＋型番・店の新着でも見つからない（商品が消えた可能性）"
 
 
 def page_name(url):
@@ -47,11 +50,17 @@ def page_name(url):
     desc = re.findall(r'<meta[^>]+(?:name|property)="(?:og:)?description"[^>]+content="([^"]{3,3000})"', html)
     if not names:
         return None, "商品名が読めない"
-    return "%s\n%s" % (" / ".join(names[:2]), " ".join(desc[:2])), ""
+    body = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S)
+    body = re.sub(r"<[^>]+>", " ", body)[:60000]   # 題名に型番が無い店（オフモールなど）は本文でも見る
+    return "%s\n%s\n%s" % (" / ".join(names[:2]), " ".join(desc[:2]), body), ""
 
 
 def main():
     rows = [r for r in read_ledger() if r.get("状態") == "出品中"]
+    only = set(json.load(open(os.path.join(ROOT, "data", "判定", "URLの点検_対象.json"), encoding="utf-8"))) if os.path.exists(os.path.join(ROOT, "data", "判定", "URLの点検_対象.json")) else None
+    if only is not None:
+        rows = [r for r in rows if r["SKU"] in only]
+    TITLE.update({(r.get("仕入元URL") or "").strip(): r.get("タイトル") or "" for r in rows})
     out = {"時刻": jst(), "合う": [], "合わない": [], "読めない": [], "対象外": [], "時間切れ": False}
     last = {}
     for r in rows:
@@ -82,7 +91,7 @@ def main():
             out["合う"].append(dict(base, 型番=md))
         else:
             out["合わない"].append(dict(base, 型番=md, 仕入れ先の商品名=head))
-    save_json(RP, out)
+    save_json(RP.replace(".json", "_見直し.json") if only is not None else RP, out)
     print("合う", len(out["合う"]), "合わない", len(out["合わない"]), "読めない", len(out["読めない"]), "対象外", len(out["対象外"]), "時間切れ", out["時間切れ"])
     return 0
 
