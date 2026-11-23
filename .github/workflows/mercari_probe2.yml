@@ -40,6 +40,7 @@ jobs:
         run: |
           mkdir -p data_repo/data/ログ
           rc=0
+          pip install -q playwright && python -m playwright install --with-deps chromium > /dev/null 2>&1
           python3 automation/mercari_probe2.py > "data_repo/data/ログ/mercari_probe2.log" 2>&1 || rc=$?
           echo "終わり（コード $rc）。中身はデータ置き場の data/ログ/mercari_probe2.log"
           exit $rc
