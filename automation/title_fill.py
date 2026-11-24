@@ -56,6 +56,8 @@ def words_for(title, aspects, name):
             v = re.sub(r"\s*\(.*?\)", "", str(v)).strip()
             if not v or BAD.match(v) or len(v) > 25 or re.search(r"[^\x00-\x7f]", v.replace("é", "")):
                 continue
+            if v[:1].islower():
+                continue   # various など、名前でない言葉
             if brand and brand.lower() in v.lower() or model and norm(model) and norm(model) in norm(v):
                 continue   # ブランド名・型番をくり返さない
             if k == "Department":
