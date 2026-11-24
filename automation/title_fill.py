@@ -99,7 +99,26 @@ def words_for(title, aspects, name):
     return res
 
 
-def fill(title, aspects, name):
+def comp_words(title, comp_titles):
+    """同じ型番の競合のタイトルに2品以上で出てくる仕様の言葉（comp_fill の決まった言葉だけ）。項目と食いちがう言葉は入れない"""
+    if not comp_titles:
+        return []
+    import collections, comp_fill
+    cnt = collections.Counter(w for t in comp_titles for w in comp_fill.words_in(t))
+    out = []
+    for w, n in cnt.most_common():
+        if n < 2 or has(title, w):
+            continue
+        if re.search(r"mm$", w) and not re.search(r"Lens|Film", title, re.I) and w != "35mm":
+            continue   # レンズの mm はレンズだけ
+        clash = next((g for g in comp_fill.CONFLICT.values() if w in g and any(has(title, x) for x in g if x != w)), None)
+        if clash:
+            continue
+        out.append(w)
+    return out
+
+
+def fill(title, aspects, name, comp_titles=None):
     m = TAIL.match(title)
     if not m:
         return None
@@ -116,7 +135,7 @@ def fill(title, aspects, name):
     head = " ".join(parts)
     if len(head) + 1 + len(tail) > 80:
         return None
-    for w in words_for(head + " " + tail, aspects, name):
+    for w in words_for(head + " " + tail, aspects, name) + comp_words(head + " " + tail, comp_titles):
         if len(head) + 1 + len(w) + 1 + len(tail) <= 80 and not has(head + " " + tail, w):
             head += " " + w
     return (head + " " + tail)[:80]

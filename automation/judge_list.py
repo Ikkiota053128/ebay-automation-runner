@@ -283,7 +283,7 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
             for k, v in asp:
                 _ad.setdefault(k, []).append(v)
             _t0 = title
-            title = title_fill.fill(title, _ad, c.get("title", "")) or title
+            title = title_fill.fill(title, _ad, c.get("title", ""), judge.COMP_TITLES.get(judge.norm(model), [])) or title
             if title != _t0:
                 html = html.replace(">%s<" % _t0, ">%s<" % title)
         except Exception:

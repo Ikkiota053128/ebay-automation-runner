@@ -107,6 +107,7 @@ def cond_of(title_ja):
 
 
 CAT_NAMES = {}   # eBay のカテゴリ番号 → 名前（競合の出品から）
+COMP_TITLES = {}   # 型番（norm）→ 競合のタイトル（11/25：タイトルを競合の仕様の言葉で80文字に近づける）
 
 
 _CC = {"path": None, "d": {}, "ttl": 0, "hit": 0, "miss": 0}
@@ -139,6 +140,8 @@ def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
     if _CC["ttl"] and k in _CC["d"]:
         _CC["hit"] += 1
         v = _CC["d"][k]
+        if v.get("ti"):
+            COMP_TITLES[norm(model)] = list(v["ti"])
         if cats is not None:
             cats.extend(v.get("c", []))
         return list(v["p"])
@@ -148,7 +151,7 @@ def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
         cats.extend(cc)
     if _CC["ttl"]:
         _CC["miss"] += 1
-        _CC["d"][k] = {"t": _t.time(), "p": ps, "c": cc}
+        _CC["d"][k] = {"t": _t.time(), "p": ps, "c": cc, "ti": COMP_TITLES.get(norm(model), [])[:8]}
     return ps
 
 
@@ -185,6 +188,7 @@ def _comps(eb, model, cond, me, my_ids, cats=None, cat=None):
             kept = [x for x in kept if x["c"] == main] or kept
     if cats is not None:
         cats.extend(x["c"] for x in kept if x["c"])
+    COMP_TITLES[md] = [x["t"] for x in kept][:8]
     return sorted(x["p"] for x in kept)
 
 
