@@ -509,7 +509,7 @@ def main():
             r.update(結論="見送り", 理由="規約のリスクの言葉（%s）" % ip_bad(c["title"]))
         elif judge.is_acc_ja(c["title"], c["型番"]):
             r.update(結論="見送り", 理由="付属品・部品（本体ではない）")
-        elif kind_of(c["url"], cfg) not in ("A", "B", "C"):
+        elif kind_of(c["url"], cfg) not in ("A", "B", "C") and c.get("src") not in NO_GAS:   # ラクマ＝GitHub のブラウザ、Amazon＝パソコンの定期タスクが在庫を見る（11/24 15:05）
             r.update(結論="GASへ", 理由="在庫の監視が見られない仕入元")
         else:
             cond = judge.cond_of(c["title"])

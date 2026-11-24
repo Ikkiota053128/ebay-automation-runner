@@ -89,6 +89,8 @@ with sync_playwright() as p:
             it = {"title": title[:200], "price": int(pm.group(1).replace(",", "")), "url": href}
             if keep(it, m) or it["price"] < int(tt.get("仕入れの下限_円", 3000)):
                 continue
+            if sum(1 for _, mm in picked if mm["model"] == m["model"]) >= int(tt.get("1型番に選ぶ上限_件", 2)):
+                continue   # 同じ型番ばかり選ばない（11/24 15:05）
             picked.append((it, m))
         if len(picked) >= pick_max:
             break
