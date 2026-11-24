@@ -1,0 +1,62 @@
+# オファーと出品の値段を合わせる（手で動かす）
+# 公開リポジトリ：プログラムだけ。台帳・記録・設定は非公開のデータ置き場（ebay-automation）を読み書きする。
+# 公開のログには件数も品名も出さない（中身は data/ログ/ に保存して、データ置き場へ）
+name: タイトルを80文字に近づける
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ledger-price_adjust
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Ikkiota053128/ebay-automation
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data_repo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: タイトルを80文字に近づける
+        env:
+          LEDGER_ROOT: ${{ github.workspace }}/data_repo
+          LEDGER_JOURNAL: ${{ runner.temp }}/ledger_journal.json
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          GAS_WEBAPP_URL: ${{ secrets.GAS_WEBAPP_URL }}
+          GAS_SEND_TOKEN: ${{ secrets.GAS_SEND_TOKEN }}
+          RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
+          RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+          RAKUTEN_RELAY_URL: ${{ secrets.RAKUTEN_RELAY_URL }}
+          RAKUTEN_RELAY_TOKEN: ${{ secrets.RAKUTEN_RELAY_TOKEN }}
+        run: |
+          mkdir -p data_repo/data/ログ
+          rc=0
+          python3 automation/title_fill.py > "data_repo/data/ログ/title_fill.log" 2>&1 || rc=$?
+          echo "終わり（コード $rc）。中身はデータ置き場の data/ログ/title_fill.log"
+          exit $rc
+      - name: 台帳と記録をデータ置き場に保存
+        if: always()
+        working-directory: data_repo
+        run: |
+          git config user.name "ebay-automation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          for i in 1 2 3 4 5; do
+            git fetch -q origin main
+            git checkout -q origin/main -- 台帳.csv 2>/dev/null || true
+            python3 ../automation/ledger_merge.py . "${{ runner.temp }}/ledger_journal.json" || exit 1
+            git add data/ 台帳.csv 2>/dev/null || git add data/
+            git diff --cached --quiet && exit 0
+            git commit -q -m "${{ github.workflow }}：記録 $(TZ=Asia/Tokyo date '+%m/%d %H:%M') JST"
+            git pull -q --rebase origin main && git push -q && exit 0
+            git rebase --abort 2>/dev/null; git pull -q --rebase -X theirs origin main && git push -q && exit 0; git rebase --abort 2>/dev/null; sleep 5
+          done
+          echo "保存に失敗"; exit 1
