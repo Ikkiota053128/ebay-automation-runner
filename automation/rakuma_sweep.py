@@ -58,7 +58,10 @@ with sync_playwright() as p:
                 out["止めた"] = "ロボットの確認・アクセス制限（検索）"
                 break
             cards = pg.eval_on_selector_all('a[href^="https://item.fril.jp/"]',
-                "els => els.map(e => ({href: e.href, text: ((e.closest('div[class*=item], li, section') || e).innerText || '').slice(0, 300)}))")
+                "els => els.map(e => { let n = e; for (let i = 0; i < 6 && n && !/¥/.test(n.innerText || ''); i++) n = n.parentElement; "
+                "return {href: e.href, name: (e.getAttribute('title') || e.innerText || '').trim().slice(0, 200), text: n ? (n.innerText || '').slice(0, 300) : ''}; })")
+            if not out.get("見本"):
+                out["見本"] = cards[:3]
         except Exception as e:
             continue
         out["検索"] += 1
@@ -72,7 +75,7 @@ with sync_playwright() as p:
             if re.search(r"SOLD ?OUT", txt):
                 continue
             pm = re.search(r"¥\s?([\d,]+)", txt)
-            title = re.sub(r"¥\s?[\d,]+", "", txt).replace("\n", " ").strip()
+            title = (c.get("name") or "").replace("\n", " ").strip() or re.sub(r"¥\s?[\d,]+", "", txt).replace("\n", " ").strip()
             if not pm or not title:
                 continue
             out["一覧の品"] += 1
