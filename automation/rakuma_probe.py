@@ -14,6 +14,9 @@ with sync_playwright() as p:
         pg.wait_for_timeout(6000)
         txt = pg.inner_text("body")[:30000]
         html = pg.content()
+        i0 = html.find("item.fril.jp/")
+        out["HTMLの見本"] = html[max(0, i0 - 1500): i0 + 2500]
+        out["aの数"] = pg.eval_on_selector_all('a[href*="item.fril.jp"]', "els => els.length")
         links = list(dict.fromkeys(re.findall(r"https://item\.fril\.jp/[0-9a-f]{20,}", html)))
         out["検索"] = {"ロボット": bool(re.search(r"ロボット|captcha|アクセスが集中", txt, re.I)), "商品の数": len(links), "はじめ": txt[:200].replace("\n", " "),
                      "値段の印": bool(re.search(r"¥\s?[\d,]+", txt)), "SOLDの数": len(re.findall(r"SOLD", txt))}
