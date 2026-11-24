@@ -26,6 +26,20 @@ SERIES_JP = [("グランドセイコー", "Grand Seiko"), ("アルバ", "Alba"),
 ASPECTS = ["Model", "Series", "Product Line", "Department", "Movement", "Display", "Features", "Type", "Case Material", "Band Material",
            "Water Resistance", "Effect Type", "Megapixels", "Optical Zoom", "Focal Length", "Maximum Aperture", "Lens Mount", "Film Format",
            "Connectivity", "Form Factor", "Reel Type", "Hand Retrieve", "Color", "Dial Color"]
+# 11/25 07:24 オーナー「はい」（案1）：仕入れ先の商品名の日本語を、決まった英語にして足す（商品名に書いてある言葉だけ）
+JP_WORDS = [("タフソーラー", "Tough Solar"), ("ソーラー", "Solar"), ("電波", "Radio Controlled"), ("自動巻", "Automatic"), ("手巻", "Hand-Wound"),
+            ("クロノグラフ", "Chronograph"), ("ムーンフェイズ", "Moon Phase"), ("ダイバー", "Diver"), ("スケルトン", "Skeleton"),
+            ("クオーツ|クォーツ", "Quartz"), ("メンズ", "Men's"), ("レディース", "Women's"), ("チタン", "Titanium"), ("ステンレス", "Stainless Steel"),
+            ("アナログ", "Analog"), ("デジタル", "Digital"),
+            ("ミラーレス", "Mirrorless"), ("二眼レフ", "TLR"), ("一眼レフ", "SLR"), ("レンジファインダー", "Rangefinder"), ("中判", "Medium Format"),
+            ("フィルムカメラ", "Film Camera"), ("コンパクト", "Compact"), ("単焦点", "Prime"), ("広角", "Wide Angle"), ("望遠", "Telephoto"),
+            ("マクロ", "Macro"), ("手ブレ補正|手振れ補正", "Image Stabilization"), ("レンズキット", "Lens Kit"), ("防水", "Waterproof"),
+            ("オーバードライブ", "Overdrive"), ("ディストーション", "Distortion"), ("ファズ", "Fuzz"), ("ディレイ", "Delay"), ("リバーブ", "Reverb"),
+            ("コーラス", "Chorus"), ("フランジャー", "Flanger"), ("フェイザー", "Phaser"), ("コンプレッサー", "Compressor"), ("ワウ", "Wah"),
+            ("ルーパー", "Looper"), ("ブースター", "Booster"), ("マルチエフェクター", "Multi-Effects"), ("ベース用", "Bass"),
+            ("スピニング", "Spinning"), ("ベイトリール", "Baitcasting"), ("左ハンドル", "Left Handed"), ("右ハンドル", "Right Handed"),
+            ("ワイヤレス", "Wireless"), ("ノイズキャンセリング", "Noise Cancelling"), ("ハイレゾ", "Hi-Res"), ("密閉型", "Closed-Back"),
+            ("開放型", "Open-Back"), ("ポータブル", "Portable"), ("カセット", "Cassette"), ("日本製", "Made in Japan")]
 DEPT = {"men": "Men's", "women": "Women's", "unisex adults": "Unisex", "unisex adult": "Unisex", "boys": "Boys'", "girls": "Girls'"}
 BAD = re.compile(r"^(does not apply|not applicable|n/?a|unbranded|unknown|other|see description|none|-|limited edition|usb.*|unisex.*|body only)$", re.I)
 
@@ -48,6 +62,12 @@ def full_model(model, name):
 
 def words_for(title, aspects, name):
     out = []
+    n = nfk(name)
+    for rx, en in JP_WORDS:
+        if re.search(rx, n) and not (en == "Waterproof" and re.search(r"Water ?Resist", title, re.I)):
+            out.append(en)
+    if "Tough Solar" in out and "Solar" in out:
+        out.remove("Solar")
     t0 = title.split(" ")
     brand, model = (t0[0], t0[1]) if len(t0) > 1 else ("", "")
     norm = lambda x: re.sub(r"[^0-9a-z]", "", x.lower())
@@ -128,7 +148,8 @@ def main():
             continue
         sku = r["SKU"]
         d0 = done.get(sku, {})
-        if d0.get("直した日時") or d0.get("失敗", 0) >= 2 or d0.get("変えない"):
+        redo = cfg.get("やり直す") and d0.get("変えない") != "GitHub の形のタイトルではない"
+        if d0.get("失敗", 0) >= 2 or (not redo and (d0.get("直した日時") or d0.get("変えない"))):
             continue
         if len(r.get("タイトル") or "") >= 76:
             continue
