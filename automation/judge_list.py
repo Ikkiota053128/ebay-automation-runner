@@ -274,6 +274,20 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
         return v
     asp = [["Brand", brand], ["Model", model]] + [[k, aval(k)] for k in kind["項目"]] + \
           [["Shipping Method", "FedEx International Connect Plus (tracked)"]]
+    # 11/25 07:22 オーナー「今後出品する際80字ギリギリタイトルにして！ちゃんと教科書通り進めて！これは、ルールブックに入れて！絶対変えないで」：
+    # 教科書の形のまま、項目の値と仕入れ先の商品名の本当の言葉だけで80文字に近づける（title_fill.fill）
+    if tt_title.get("教科書のタイトル"):
+        try:
+            import title_fill
+            _ad = {}
+            for k, v in asp:
+                _ad.setdefault(k, []).append(v)
+            _t0 = title
+            title = title_fill.fill(title, _ad, c.get("title", "")) or title
+            if title != _t0:
+                html = html.replace(">%s<" % _t0, ">%s<" % title)
+        except Exception:
+            pass
     w, (l, wd, h) = kind["重さ_g"], sorted([float(x) for x in kind["箱"].split("x")], reverse=True)
     pol = dict(kind.get("ポリシー") or {})
     if re.search(r"netmall\.hardoff\.co\.jp|ec\.treasure-f\.com", c.get("url", "")):   # 発送まで日数がかかる店：発送10営業日（11/18 21:46 オーナー）
