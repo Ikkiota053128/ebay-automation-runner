@@ -341,7 +341,7 @@ def next_sku(c, n):
     d = load_json(p, {"n": 0})
     d["n"] = int(d["n"]) + 1
     save_json(p, d)
-    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR", "Amazon（人）": "AZ", "Yahoo!フリマ": "YF", "ヤフオク": "YA", "ラクマ": "RM"}.get(c["src"], "ST")
+    code = {"楽天": "RK", "Yahoo!": "YS", "イシバシ楽器": "IS", "カメラの八百富": "YT", "フジヤカメラ": "FJ", "トレファク": "TF", "ハードオフ": "HO", "メルカリ（人）": "MR", "Amazon（人）": "AZ", "Yahoo!フリマ": "YF", "ヤフオク": "YA", "ラクマ": "RM", "Amazon": "AZ"}.get(c["src"], "ST")
     return "G%s-%06d" % (code, d["n"])
 
 
@@ -441,7 +441,8 @@ def main():
         load_json(os.path.join(ROOT, "data", "店のサイトの地引網", "送る待ち.json"), []) + (gas_cands() if tt.get("GASにv667") else []) + \
         load_json(os.path.join(ROOT, "data", "人の候補", "送る待ち.json"), []) + \
         load_json(os.path.join(ROOT, "data", "フリマ新着", "リスト外の候補.json"), []) + \
-        load_json(os.path.join(ROOT, "data", "ラクマ", "送る待ち.json"), [])   # 11/19 10:32 オーナー「1と使い回し3日」：型番リストに無いフリマの品   # メルカリ：人が集めた候補（教科書 第18章。プログラムはメルカリを開かない）
+        load_json(os.path.join(ROOT, "data", "ラクマ", "送る待ち.json"), []) + \
+        load_json(os.path.join(ROOT, "data", "Amazon", "送る待ち.json"), [])   # 11/24 09:34 オーナー「Amazonも定期タスクで探して」：パソコンの定期タスクが集めた品   # 11/19 10:32 オーナー「1と使い回し3日」：型番リストに無いフリマの品   # メルカリ：人が集めた候補（教科書 第18章。プログラムはメルカリを開かない）
     # メルカリ（メール・ブラウザで集めた品）は、オーナーがGOを出した品だけ出品する（11/18 21:45 オーナー「メルカリはこれをやって」）
     import glob as _glob
     mgo_p = os.path.join(ROOT, "data", "判定", "メルカリGO待ち.json")
@@ -655,7 +656,7 @@ def main():
     if rows:
         save_ledger(rows, list(rows[0].keys()), NAME)
     # 店のサイトの地引網の品で「GASへ」になったものは、ここから GAS に送る（店の地引網の品は、店の地引網が送る）
-    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!", "ラクマ") and not str(c.get("id", "")).startswith("人:") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
+    to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!", "ラクマ", "Amazon") and not str(c.get("id", "")).startswith("人:") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
     if live and to_gas:
         try:
             from flea_sweep import gas_post
