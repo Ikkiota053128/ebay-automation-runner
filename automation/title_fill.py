@@ -178,6 +178,19 @@ def main():
             old = p.get("title") or ""
             out["見た"] += 1
             new = fill(old, p.get("aspects") or {}, names.get(sku, ""))
+            # 11/25 07:37 オーナー「後の数字がまだ43とかある」：70文字に届かない品は、同じ型番の競合のタイトルを検索で読んで仕様の言葉を足す
+            if new and len(new) < 70 and cfg.get("競合を見る", True):
+                try:
+                    parts = old.split(" ")
+                    mdl = re.sub(r"[^0-9A-Z]", "", parts[1].upper()) if len(parts) > 1 else ""
+                    if len(mdl) >= 3:
+                        its = eb.browse("%s %s" % (parts[0], parts[1]), "buyingOptions:{FIXED_PRICE}", limit=50)
+                        cts = [x.get("title", "") for x in its if (x.get("seller") or {}).get("username", "").lower() != "ihdj_81"
+                               and mdl in re.sub(r"[^0-9A-Z]", "", x.get("title", "").upper())][:10]
+                        new = fill(old, p.get("aspects") or {}, names.get(sku, ""), cts) or new
+                        out["競合を見た"] = out.get("競合を見た", 0) + 1
+                except Exception:
+                    pass
             if not new:
                 done[sku] = {"変えない": "GitHub の形のタイトルではない"}
                 continue
