@@ -57,9 +57,16 @@ with sync_playwright() as p:
             if blocked(pg.inner_text("body")[:5000]):
                 out["止めた"] = "ロボットの確認・アクセス制限（検索）"
                 break
-            cards = pg.eval_on_selector_all('a[href^="https://item.fril.jp/"]',
-                "els => els.map(e => { let n = e; for (let i = 0; i < 6 && n && !/¥/.test(n.innerText || ''); i++) n = n.parentElement; "
-                "return {href: e.href, name: (e.getAttribute('title') || e.innerText || '').trim().slice(0, 200), text: n ? (n.innerText || '').slice(0, 300) : ''}; })")
+            html = pg.content()
+            cards = []
+            for tag in re.findall(r'<a [^>]*class="link_search_image"[^>]*>', html):
+                h = re.search(r'href="(https://item\.fril\.jp/[0-9a-f]+)"', tag)
+                nm = re.search(r'data-rat-item_name="([^"]*)"', tag)
+                pr = re.search(r'data-rat-price="(\d+)"', tag)
+                if h and nm and pr:
+                    cards.append({"href": h.group(1), "name": nm.group(1).replace("&amp;", "&"), "text": "¥" + pr.group(1)})
+            tot = re.search(r'data-rat-cp-totalresults="(\d+)"', html)
+            out.setdefault("件数", {})[kw] = int(tot.group(1)) if tot else -1
             if not out.get("見本"):
                 out["見本"] = cards[:3]
         except Exception as e:
