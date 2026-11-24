@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, jst, now, save_json, read_ledger, timetable, notify
 
 tt = timetable("メルカリの見回り") or {}
+SITE_RX = re.compile(r"jp\.mercari\.com/item/|item\.fril\.jp/")   # 11/24 09:01 オーナー「楽天ラクマ…仕入れ先入れて」：ラクマ（GitHub から読める）も同じブラウザで見る
 if tt.get("実行") is False:
     print("止めている")
     sys.exit(0)
@@ -21,7 +22,7 @@ from common import load_json, num
 import datetime as _dt
 qp = os.path.join(ROOT, "data", "判定", "売れたらすぐ見る.json")
 sold_q = load_json(qp, {"待ち": []}).get("待ち", [])
-sold_rows = [r for r in led if r["SKU"] in sold_q and "jp.mercari.com/item/" in (r.get("仕入元URL") or "")]
+sold_rows = [r for r in led if r["SKU"] in sold_q and SITE_RX.search(r.get("仕入元URL") or "")]
 def due(r):
     last = r.get("最後に仕入元を確認した日時") or ""
     try:
@@ -41,7 +42,7 @@ def due(r):
     except Exception:
         pass
     return age_h / iv   # 1 以上なら見る時期
-live = [r for r in led if r.get("状態") == "出品中" and "jp.mercari.com/item/" in (r.get("仕入元URL") or "")]
+live = [r for r in led if r.get("状態") == "出品中" and SITE_RX.search(r.get("仕入元URL") or "")]
 live = sorted([r for r in live if due(r) >= 1], key=lambda r: -due(r))
 rows = (sold_rows + live)[:n_max]
 out = {"時刻": jst(), "ある": [], "ない": [], "読めない": [], "止めた": ""}
@@ -66,7 +67,15 @@ if rows:
             if re.search(r"ロボットではありません|captcha|アクセスが集中|アクセスを制限|しばらくしてから", txt, re.I):
                 out["止めた"] = "ロボットの確認・アクセス制限の画面（%s）" % r["SKU"]
                 break
-            if re.search(r"売り切れました|削除されています|ページが見つかりません|見つかりませんでした", txt):
+            if "fril.jp" in url:   # ラクマ：売り切れは「SOLD OUT」、販売中は「購入に進む」（11/24 09:04 の試し）
+                if re.search(r"SOLD ?OUT", txt[:4000]) or re.search(r"削除されました|ページが見つかりません|存在しません", txt):
+                    res = "ない"
+                elif "購入に進む" in txt:
+                    res = "ある"
+                else:
+                    out["読めない"].append({"SKU": r["SKU"], "理由": "ラクマ：印が無い"})
+                    continue
+            elif re.search(r"売り切れました|削除されています|ページが見つかりません|見つかりませんでした", txt):
                 res = "ない"
             elif "購入手続きへ" in txt:
                 res = "ある"
