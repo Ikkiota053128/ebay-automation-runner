@@ -110,6 +110,11 @@ with sync_playwright() as p:
         st["見た"][it["url"]] = jst()
         if re.search(r"SOLD ?OUT", t[:4000]) or "購入に進む" not in t:
             continue
+        # 11/24 09:54 オーナー「楽天ラクマは即買い可能と審査の物がある？それは注意して出品して！」：
+        # 購入申請（出品者の承認が要る）の品は出さない。「すぐに購入可」の品だけ
+        if "購入申請" in t:
+            out.setdefault("購入申請で外した", []).append(it["url"])
+            continue
         og = (re.findall(r'property="og:image"[^>]*content="([^"]+)"', html) or re.findall(r'content="([^"]+)"[^>]*property="og:image"', html) or [""])[0]
         mid = re.search(r"img\.fril\.jp/img/(\d+)/", og)
         photos = []

@@ -70,6 +70,8 @@ if rows:
             if "fril.jp" in url:   # ラクマ：売り切れは「SOLD OUT」、販売中は「購入に進む」（11/24 09:04 の試し）
                 if re.search(r"SOLD ?OUT", txt[:4000]) or re.search(r"削除されました|ページが見つかりません|存在しません", txt):
                     res = "ない"
+                elif "購入申請" in txt:   # 11/24 09:54：出品者の承認が要る品に変わった → すぐ買えないので在庫0にする
+                    res = "ない"
                 elif "購入に進む" in txt:
                     res = "ある"
                 else:
