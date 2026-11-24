@@ -27,7 +27,7 @@ ASPECTS = ["Model", "Series", "Product Line", "Department", "Movement", "Display
            "Water Resistance", "Effect Type", "Megapixels", "Optical Zoom", "Focal Length", "Maximum Aperture", "Lens Mount", "Film Format",
            "Connectivity", "Form Factor", "Reel Type", "Hand Retrieve", "Color", "Dial Color"]
 DEPT = {"men": "Men's", "women": "Women's", "unisex adults": "Unisex", "unisex adult": "Unisex", "boys": "Boys'", "girls": "Girls'"}
-BAD = re.compile(r"^(does not apply|not applicable|n/?a|unbranded|unknown|other|see description|none|-)$", re.I)
+BAD = re.compile(r"^(does not apply|not applicable|n/?a|unbranded|unknown|other|see description|none|-|limited edition|usb.*|unisex.*|body only)$", re.I)
 
 
 def nfk(s):
@@ -48,13 +48,18 @@ def full_model(model, name):
 
 def words_for(title, aspects, name):
     out = []
+    t0 = title.split(" ")
+    brand, model = (t0[0], t0[1]) if len(t0) > 1 else ("", "")
+    norm = lambda x: re.sub(r"[^0-9a-z]", "", x.lower())
     for k in ASPECTS:
         for v in aspects.get(k) or []:
             v = re.sub(r"\s*\(.*?\)", "", str(v)).strip()
             if not v or BAD.match(v) or len(v) > 25 or re.search(r"[^\x00-\x7f]", v.replace("é", "")):
                 continue
+            if brand and brand.lower() in v.lower() or model and norm(model) and norm(model) in norm(v):
+                continue   # ブランド名・型番をくり返さない
             if k == "Department":
-                v = DEPT.get(v.lower(), "")
+                v = DEPT.get(v.lower(), "") if re.search(r"watch", title, re.I) else ""
             elif k == "Water Resistance" and re.match(r"^\d+ ?(m|ATM|Bar)", v, re.I):
                 v = "%s Water Resistant" % v.replace(" ", "")
             elif k == "Dial Color":
