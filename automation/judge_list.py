@@ -27,6 +27,7 @@ BRAND_JA = {"カシオ": "Casio", "ソニー": "Sony", "シチズン": "Citizen"
             "フジフイルム": "Fujifilm", "リコー": "Ricoh", "ボス": "BOSS", "ローランド": "Roland", "ヤマハ": "Yamaha", "シマノ": "Shimano",
             "ダイワ": "Daiwa", "タムロン": "Tamron", "シグマ": "Sigma", "オーディオテクニカ": "Audio-Technica", "デノン": "Denon"}
 KEEP_CAPS = {"BOSS", "MXR", "TEAC", "AKAI", "JVC", "TDK", "SMC", "EHX"}
+NO_GAS = ("ラクマ", "Amazon")   # 11/24 09:45 オーナー「絶対Amazon，楽天ラクマ全ての工程GAS使わないで！」
 COND_DESC = "Used. NOT TESTED - we have not tested this item and its function is not confirmed. Please judge from the photos."
 
 
@@ -622,7 +623,8 @@ def main():
                                         listed.append((sku, lid, pl["title"], price))
                                         if listing_limit_left() is not None:
                                             listing_limit_spend(price)
-                                        gas_items.append({"itemId": lid, "offerId": oid, "sku": sku, "title": pl["title"], "price": price,
+                                        if c.get("src") not in NO_GAS:   # 11/24 09:45 オーナー「絶対Amazon，楽天ラクマ全ての工程GAS使わないで」
+                                          gas_items.append({"itemId": lid, "offerId": oid, "sku": sku, "title": pl["title"], "price": price,
                                                           "cost": c["price"], "src": c["url"]})
                                         if sku not in ledger_skus:
                                             rows.append({"SKU": sku, "eBayの出品ID": lid, "offerId": oid, "仕入元URL": c["url"],
@@ -655,6 +657,12 @@ def main():
         time.sleep(0.5)
     if rows:
         save_ledger(rows, list(rows[0].keys()), NAME)
+    # 11/24 09:45 オーナー「絶対Amazon，楽天ラクマ全ての工程GAS使わないで！」：この2つの品は GAS へ回さず「見送り」にする
+    no_gas_ids = {c["id"] for c in todo if c.get("src") in NO_GAS}
+    for r in res:
+        if r.get("id") in no_gas_ids and r.get("結論") == "GASへ":
+            r["結論"], r["理由"] = "見送り", "GitHub で出せない（GASは使わない：Amazon・ラクマ）／" + str(r.get("理由") or "")
+            done[r["id"]] = {"t": now().timestamp(), "結論": "見送り"}
     # 店のサイトの地引網の品で「GASへ」になったものは、ここから GAS に送る（店の地引網の品は、店の地引網が送る）
     to_gas = [c for c in todo if c.get("src") not in ("楽天", "Yahoo!", "ラクマ", "Amazon") and not str(c.get("id", "")).startswith("人:") and any(r.get("id") == c["id"] and r["結論"] == "GASへ" for r in res)]
     if live and to_gas:
