@@ -17,13 +17,19 @@ with sync_playwright() as p:
         links = list(dict.fromkeys(re.findall(r"https://item\.fril\.jp/[0-9a-f]{20,}", html)))
         out["検索"] = {"ロボット": bool(re.search(r"ロボット|captcha|アクセスが集中", txt, re.I)), "商品の数": len(links), "はじめ": txt[:200].replace("\n", " "),
                      "値段の印": bool(re.search(r"¥\s?[\d,]+", txt)), "SOLDの数": len(re.findall(r"SOLD", txt))}
-        for u in links[:2]:
+        pg.goto("https://fril.jp/s?query=BOSS+DS-1&transaction=soldout", wait_until="domcontentloaded", timeout=45000)
+        pg.wait_for_timeout(6000)
+        sold = list(dict.fromkeys(re.findall(r"https://item\.fril\.jp/[0-9a-f]{20,}", pg.content())))[:2]
+        cards = pg.eval_on_selector_all('a[href^="https://item.fril.jp/"]', "els => els.slice(0,6).map(e => e.innerText.slice(0,120))")
+        out["一覧の文字"] = cards
+        for u in links[:2] + sold:
             time.sleep(25)
             pg.goto(u, wait_until="domcontentloaded", timeout=45000)
             pg.wait_for_timeout(6000)
             t = pg.inner_text("body")[:40000]
             out["商品"].append({"URL": u, "題名": (pg.title() or "")[:100], "購入に進む": "購入に進む" in t, "売り切れ": bool(re.search(r"売り切れ|SOLD OUT|売切", t)),
-                              "値段": (re.findall(r"¥\s?[\d,]+", t) or [""])[0], "写真": len(re.findall(r"img\.fril\.jp/img/\d+/l/", pg.content()))})
+                              "値段": (re.findall(r"¥\s?[\d,]+", t) or [""])[0], "写真": len(re.findall(r"img\.fril\.jp/img/\d+/l/", pg.content())), "売り切れの検索から": u in sold,
+                              "ボタンのあたり": re.findall(r".{0,40}(?:購入|売り切れ|SOLD|カート).{0,40}", t)[:6]})
     except Exception as e:
         out["エラー"] = str(e)[:200]
     b.close()
