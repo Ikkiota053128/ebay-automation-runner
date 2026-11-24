@@ -146,6 +146,28 @@ def same_seller(ph, html, c):
     return [u for u in ph if (SELLER_RX.search(u) or [None, None])[1] == main]
 
 
+def rk_img(u):
+    """楽天の写真のアドレスを、読める形にする（11/25 07:45 オーナー「最近読み取れない商品画像が出品されるのはなぜ？」）。
+    元の大きさ（?_ex なし）→ image.rakuten.co.jp の元の写真 → ?_ex=700x700 の順に試し、GET で画像が返ったものを使う。どれもだめなら空"""
+    import urllib.request
+    if not u.startswith("https://"):
+        return ""
+    base = u.split("?")[0]
+    cands = [base]
+    m = re.match(r"https://thumbnail\.image\.rakuten\.co\.jp/@0_mall/(.+)$", base)
+    if m:
+        cands.append("https://image.rakuten.co.jp/" + m.group(1))
+    cands.append(base + "?_ex=700x700")
+    for x in cands:
+        try:
+            with urllib.request.urlopen(urllib.request.Request(x, headers={"User-Agent": "Mozilla/5.0"}), timeout=15) as f:
+                if (f.headers.get("Content-Type") or "").startswith("image/") and len(f.read(4000)) >= 3000:
+                    return x
+        except Exception:
+            continue
+    return ""
+
+
 def more_photos(c):
     """Yahoo!ショッピングは、APIの写真が1枚だけ。商品ページ（GitHub から読める）から同じ商品の写真（_1, _2 …）を集める。楽天のページは読めない"""
     ph = photos_of(c)
@@ -154,14 +176,15 @@ def more_photos(c):
         if hand_only(c.get("url")):
             return ph
         if "item.rakuten.co.jp" in c.get("url", ""):
+            ph = [x for x in (rk_img(u) for u in ph) if x]   # 地引網の写真のアドレスも、読める形に直す（読めないものは外す）
             # 11/21 18:47 オーナー「1 → 2 → 3」：楽天は公式API（itemCode）の写真（mediumImageUrls・最大3枚）を、元の大きさ（?_ex= を外す）で使う。ページは開かない
             try:
                 from stock_watch import rakuten_item
                 it = rakuten_item(c["url"], c.get("title") or c.get("name") or "")
                 for u in (it or {}).get("mediumImageUrls") or []:
                     u = (u.get("imageUrl") if isinstance(u, dict) else u) or ""
-                    u = u.split("?")[0]
-                    if u.startswith("https://") and u not in ph:
+                    u = rk_img(u)   # 11/25：?_ex を外すと 404 になる店がある（読めない写真で出品していた）。読める形を確かめて使う
+                    if u and u not in ph:
                         ph.append(u)
             except Exception:
                 pass
