@@ -9,7 +9,8 @@
 - 出した品は台帳に1行・GAS へ kind=ghnew（「GASにv664」が true のときだけ）。GAS の出品一覧に載り、GAS が同じ型番を出さない。
 - 検索（Browse）の残りが「Browseの残りの下限」より少ないときは止める（GAS の分を残す）。
 """
-import collections, json, os, re, statistics, sys, time
+import collections, json, os, re, statistics, sys, time, urllib.parse
+import title_make
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import (hand_only, ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
                     mark_started, load_json, save_json, browse_stopped, browse_stop, listing_limit_stopped, listing_limit_stop, listing_limit_left, listing_limit_spend,
@@ -428,6 +429,9 @@ def main():
         return 0
     kinds = load_json(os.path.join(ROOT, "data", "判定", "種類.json"), {})
     new_cat = load_json(os.path.join(ROOT, "data", "判定", "新しいカテゴリの出品.json"), {})
+    cpd = load_json(os.path.join(ROOT, "data", "判定", "コストプラスの数.json"), {})
+    cp_today = int(cpd.get(now().strftime("%Y-%m-%d"), 0))
+    cp_cfg = (settings().get("値付けの式_第5章") or {})
     st = load_json(os.path.join(ROOT, "data", "判定", "送料表.json"), {})
     qs = {"floorYen": 1500, "floorRate": 0.05, "tol": 0.30, "high": 100, "overMax": 1.4}
     qs.update(cfg.get("判定", {}).get("値付け", {}))
@@ -530,6 +534,19 @@ def main():
                     continue
                 cc = collections.Counter(cats).most_common(1)
                 cat = cc[0][0] if cc and cc[0][1] * 2 >= len(cats) else ""
+                # 11/24 19:23 オーナー「おすすめは 2でお願いします」：競合が無い品は、教科書 第5章のコストプラスで出す。
+                # ただし型番が商品名にそのまま入っていて、ブランド名も商品名にある品だけ。1日の上限 時刻表 判定と出品 → コストプラス_1日。
+                cp = False
+                if len(act) < int(tt.get("競合の最低件数", 1)) and cp_today < int(tt.get("コストプラス_1日", 5)):
+                    mk = (c.get("メーカー") or "").strip()
+                    if title_make.check_model(c.get("型番", ""), c.get("title", ""), "") and mk and mk.lower() in c.get("title", "").lower():
+                        try:
+                            _, sg = eb.call("GET", "/commerce/taxonomy/v1/category_tree/0/get_category_suggestions?q=" + urllib.parse.quote("%s %s" % (c.get("brand_en") or mk, c.get("型番", ""))))
+                            sugg = [x["category"]["categoryId"] for x in (sg or {}).get("categorySuggestions") or []]
+                        except EbayError:
+                            sugg = []
+                        cat = next((x for x in sugg if x in kinds), "")
+                        cp = bool(cat)
                 # 11/23 19:07 オーナー「1〜3やって」：①まちがったカテゴリの直し（ビデオカメラがアニメのグッズに出る など）③店に合わないカテゴリは見送り
                 skip_cat = False
                 fx = (tt.get("カテゴリの直し") or {}).get(cat)
@@ -542,11 +559,11 @@ def main():
                     skip_cat = True
                 kind = None if skip_cat else (kinds.get(cat) or auto_kind(cat, kinds))
                 r.update(競合の数=len(act), 競合=act[:5], カテゴリ=cat)
-                if len(act) < int(tt.get("競合の最低件数", 1)):   # 11/20 9:41 オーナー「A→Bでお願い」：競合1件でも、その値段とフロアで値付けする（前は2件未満を GAS へ）
+                if len(act) < int(tt.get("競合の最低件数", 1)) and not cp:   # 11/20 9:41 オーナー「A→Bでお願い」：競合1件でも、その値段とフロアで値付けする（前は2件未満を GAS へ）
                     r.update(結論="見送り", 理由="eBayに同じ型番の競合が無い（相場と比べられない）")
-                elif c["price"] > float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * statistics.median(act) * 152:
+                elif not cp and c["price"] > float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * statistics.median(act) * 152:
                     r.update(結論="見送り", 理由="仕入値が相場の中央値の%d割を超える（教科書 第21章）" % round(float(qs.get("相場の中央値に対する仕入値の上限", 0.6)) * 10))
-                elif c["price"] < 0.2 * act[0] * 152:
+                elif not cp and c["price"] < 0.2 * act[0] * 152:
                     r.update(結論="見送り", 理由="仕入値がeBayの最安の2割未満（付属品・別物の疑い）")
                 elif skip_cat:
                     r.update(結論="見送り", 理由="店に合わないカテゴリ（%s %s）" % (cat, judge.CAT_NAMES.get(cat, "")))
@@ -558,7 +575,11 @@ def main():
                     ship = judge.ship_fedex(kind["重さ_g"], kind["箱"], st["FedEx"])
                     d = {"cost": c["price"], "dom": c.get("dom", 2000), "ship": ship, "fee": kind.get("手数料率", 0.1742),
                          "duty": kind.get("関税率", 0.15), "fixed": 0, "fx": 152}
-                    price, how, fp = judge.quote(act, d, qs)
+                    price, how, fp = judge.cost_plus(d, qs, cp_cfg) if cp else judge.quote(act, d, qs)
+                    if cp and price is not None:
+                        cp_today += 1
+                        cpd[now().strftime("%Y-%m-%d")] = cp_today
+                        save_json(os.path.join(ROOT, "data", "判定", "コストプラスの数.json"), cpd)
                     r.update(種類=kind["名前"], 送料=ship, 国内送料=d["dom"], フロア=fp, 値段の決め方=how)
                     if price is None:
                         r.update(結論="見送り", 理由=how)

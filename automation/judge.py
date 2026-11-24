@@ -245,6 +245,24 @@ def quote(act0, d, qs):
     return None, "見送り：フロア $%.2f が相場 $%.2f の%.1f倍を超える" % (fp, ref, qs["overMax"]), fp
 
 
+def cost_plus(d, qs, cfg):
+    """教科書 第5章のコストプラス（競合が無い品）：利益＝売値の 15%（コストプラス_売値に対する利益率）、1品の利益は 2万円まで（コストプラス_1品の利益の上限_円）。
+    フロア（5%・1,500円）より安くはしない。11/24 19:23 オーナー「おすすめは 2でお願いします」"""
+    k = d["fee"] + d["duty"]
+    base = d["cost"] + d["dom"] + d["ship"] + d["fixed"]
+    fp = floor_price(base, 1 - k, d["fx"], qs["floorYen"], qs["floorRate"])
+    rate = float(cfg.get("コストプラス_売値に対する利益率", 0.15))
+    cap = float(cfg.get("コストプラス_1品の利益の上限_円", 20000))
+    if fp is None or 1 - k - rate <= 0:
+        return None, "利益の計算ができない", fp
+    p = base / (d["fx"] * (1 - k - rate))
+    if p * d["fx"] * rate > cap:
+        p = (base + cap) / (d["fx"] * (1 - k))
+    p = max(p, fp)
+    p = math.ceil(p * 100 - 1e-6) / 100
+    return p, "コストプラス（競合なし・利益は売値の%d%%・上限%d円）" % (round(rate * 100), cap), fp
+
+
 def profit(price, d):
     raw = price * d["fx"] * (1 - d["fee"] - d["duty"]) - d["cost"] - d["dom"] - d["ship"] - d["fixed"]
     return round(raw), raw / (price * d["fx"]) if price else 0
