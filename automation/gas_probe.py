@@ -2,7 +2,7 @@
 import os, re, urllib.parse, urllib.request
 url, tok = os.environ.get("GAS_WEBAPP_URL", "").strip(), os.environ.get("GAS_SEND_TOKEN", "").strip()
 print("URL の形：", "exec" if url.endswith("/exec") else ("dev" if url.endswith("/dev") else "そのほか"))
-for page in ("ghcands", "ghmodels"):
+for page in ("ghcands", "models", "ghlistq", "ghrates", "srcmap"):
     q = url + "?" + urllib.parse.urlencode({"page": page, "token": tok, "hours": 1})
     try:
         with urllib.request.urlopen(urllib.request.Request(q, headers={"User-Agent": "Mozilla/5.0"}), timeout=60) as f:
