@@ -38,6 +38,8 @@ jobs:
           mkdir -p data_repo/data/ログ
           rc=0
           python3 automation/order_notify.py > "data_repo/data/ログ/order_notify.log" 2>&1 || rc=$?
+          # 11/25 09:25 オーナー「店の経理を任せたい」①：注文ごとの見積を経理の注文台帳に（失敗しても受注の通知は止めない）
+          python3 automation/keiri.py record > "data_repo/data/ログ/keiri.log" 2>&1 || echo "経理の記録に失敗（data/ログ/keiri.log）"
           echo "終わり（コード $rc）。中身はデータ置き場の data/ログ/order_notify.log"
           exit $rc
       - name: 台帳と記録をデータ置き場に保存
