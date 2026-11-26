@@ -42,6 +42,8 @@ jobs:
           mkdir -p data_repo/data/ログ
           rc=0
           python3 automation/stock_watch.py > "data_repo/data/ログ/stock_watch.log" 2>&1 || rc=$?
+          # 11/26 22:39 オーナー「教科書通りやって」：個人の1点物で在庫ゼロの旧出品（offerId なし）を終える（失敗しても在庫の監視は止めない）
+          python3 automation/end_old.py > "data_repo/data/ログ/end_old.log" 2>&1 || echo "旧出品を終えるのに失敗（data/ログ/end_old.log）"
           echo "終わり（コード $rc）。中身はデータ置き場の data/ログ/stock_watch.log"
           exit $rc
       - name: 台帳と記録をデータ置き場に保存

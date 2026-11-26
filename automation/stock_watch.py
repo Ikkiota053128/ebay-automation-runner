@@ -375,6 +375,21 @@ def main():
     save_ledger(rows, ["最後に仕入元を確認した日時"], NAME)
     if done:
         save_ledger(done, ["状態"], NAME)
+        # 11/26 22:39 オーナー「教科書通りやって」：個人の1点物（メルカリ・Yahoo!フリマ・ラクマ・ヤフオク）は在庫ゼロになったら終える（教科書 5章）
+        one = [r for r in done if re.search(r"mercari|paypayfleamarket|auctions\.yahoo|fril\.jp", str(r.get("仕入元URL")))]
+        if one and live:
+            wp = os.path.join(ROOT, "data", "判定", "取り下げ.json")
+            w = load_json(wp, {"待ち": [], "済み": []})
+            w["待ち"] = list(dict.fromkeys(w.get("待ち", []) + [r["SKU"] for r in one if r.get("offerId")]))
+            save_json(wp, w)
+            ep = os.path.join(ROOT, "data", "判定", "終える_旧出品.json")
+            e = load_json(ep, {"本番": False, "SKU": []})
+            old_ = [r["SKU"] for r in one if not r.get("offerId")]
+            if old_:
+                e["SKU"] = list(dict.fromkeys((e.get("SKU") or []) + old_))
+                e["本番"] = True
+                save_json(ep, e)
+            msg.append("個人の1点物で在庫ゼロ → 終える一覧へ %d品：%s" % (len(one), ", ".join(r["SKU"] for r in one[:10])))
     save_json(os.path.join(ROOT, "data", "在庫の監視", now().strftime("%Y%m%d_%H%M") + ".json"),
               {"時刻": jst(), "本番": live, "ある": out["ある"], "ない": out["ない"], "読めない": out["読めない"],
                "在庫を0にした": [r["SKU"] for r in done], "失敗": bad, "戻った": back, "事故": accident, "読めない理由": why_unk})
