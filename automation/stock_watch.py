@@ -393,6 +393,33 @@ def main():
     save_json(os.path.join(ROOT, "data", "在庫の監視", now().strftime("%Y%m%d_%H%M") + ".json"),
               {"時刻": jst(), "本番": live, "ある": out["ある"], "ない": out["ない"], "読めない": out["読めない"],
                "在庫を0にした": [r["SKU"] for r in done], "失敗": bad, "戻った": back, "事故": accident, "読めない理由": why_unk})
+    # 11/26 22:44 オーナー「在庫確認は、仕入れ先ごとしっかり毎日確認して！」：仕入れ先ごとに、最後に在庫を見てからの時間を毎回知らせる
+    try:
+        import collections, datetime as _d
+        _now = _d.datetime.now(_d.timezone(_d.timedelta(hours=9))).replace(tzinfo=None)
+        _names = [("mercari", "メルカリ"), ("paypayfleamarket", "Yahoo!フリマ"), ("auctions.yahoo", "ヤフオク"), ("fril", "ラクマ"),
+                  ("rakuten", "楽天"), ("shopping.yahoo", "Yahoo!ショッピング"), ("amazon", "Amazon")]
+        fr = collections.defaultdict(lambda: [0, 0, 0.0])
+        for r2 in read_ledger():
+            if r2.get("状態") != "出品中" or str(r2.get("SKU", "")).startswith("STK-"):
+                continue
+            nm = next((n for k, n in _names if k in str(r2.get("仕入元URL"))), "店ほか")
+            t = str(r2.get("最後に仕入元を確認した日時", ""))[:16]
+            try:
+                h = (_now - _d.datetime.strptime(t, "%Y-%m-%d %H:%M")).total_seconds() / 3600
+            except ValueError:
+                h = 999
+            b = fr[nm]
+            b[0] += 1
+            b[2] = max(b[2], h)
+            if h > 8:
+                b[1] += 1
+        line = "・".join("%s %d品（8時間より前 %d・いちばん古い %s）" % (k, v[0], v[1], "未確認" if v[2] >= 999 else "%d時間" % v[2])
+                        for k, v in sorted(fr.items(), key=lambda x: -x[1][0]))
+        msg.append("仕入れ先ごとの見回り：" + line)
+        save_json(os.path.join(ROOT, "data", "在庫の監視", "仕入れ先ごと.json"), {"時刻": jst(), "仕入れ先": {k: {"出品中": v[0], "8時間より前": v[1], "いちばん古い_時間": round(v[2])} for k, v in fr.items()}})
+    except Exception as e:
+        msg.append("仕入れ先ごとの見回りを数えられなかった：%s" % str(e)[:100])
     write_run(NAME, not bad, len(rows), len(bad) + len(alerts))
     notify("\n".join(msg))
     return 0
