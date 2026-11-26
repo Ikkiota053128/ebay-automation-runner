@@ -168,6 +168,37 @@ def judge(code, html):
     return None, "在庫を判断できない"
 
 
+def alt_sources(r):
+    """11/26 22:36 オーナー「AとBやって」B：売れたのに仕入元に無い品の、代わりの仕入れ先の候補（同じ型番・在庫あり・安い順に3つ）。
+    付け替えはしない（11/24 の香水の事故のため）。人が商品名を見て、同じ品なら買う"""
+    try:
+        from price_adjust import model_of
+        from shop_sweep import rakuten, yahoo, keep
+        from flea_sweep import compile_models
+        md = model_of(r.get("タイトル"))
+        if not md:
+            return "\n  代わりの仕入れ先：型番が読めないので探せない"
+        m = compile_models([{"maker": (r.get("タイトル") or "").split(" ")[0], "model": md, "cap": 10 ** 7}])[0]
+        rk = {"id": os.environ.get("RAKUTEN_APP_ID", "").strip(), "access": os.environ.get("RAKUTEN_ACCESS_KEY", "").strip(),
+              "relay": os.environ.get("RAKUTEN_RELAY_URL", "").strip(), "relay_token": os.environ.get("RAKUTEN_RELAY_TOKEN", "").strip()}
+        ya = os.environ.get("YAHOO_CLIENT_ID", "").strip()
+        found = []
+        for fn, ok in ((lambda mm: rakuten(mm, rk), rk["id"] and rk["access"]), (lambda mm: yahoo(mm, ya), ya)):
+            if not ok:
+                continue
+            _, items = fn(m)
+            time.sleep(2)
+            found += [it for it in items if it["url"] != r.get("仕入元URL") and not keep(it, m)]
+        found.sort(key=lambda it: it["price"])
+        if not found:
+            return "\n  代わりの仕入れ先：楽天・Yahoo!ショッピングに同じ型番の在庫ありが見つからない"
+        cost = num(r.get("仕入値(円)")) or 0
+        return "\n  代わりの仕入れ先（同じ品か商品名を必ず確かめる・元の仕入値 %s円）：" % int(cost) + "".join(
+            "\n   ・%s円 %s\n     %s" % (it["price"], it["title"][:50], it["url"]) for it in found[:3])
+    except Exception as e:
+        return "\n  代わりの仕入れ先を探せなかった：%s" % str(e)[:100]
+
+
 def main():
     cfg, tt = settings(), timetable(NAME)
     live = bool(tt.get("実行"))
@@ -186,8 +217,16 @@ def main():
     rows = [r for r in ledger if is_target(r) and r.get("状態") in ("出品中", "在庫ゼロ", "売れた")
             and not hand_only(r.get("仕入元URL")) and (kind_of(r.get("仕入元URL"), cfg) in ("A", "C")
                  or (kind_of(r.get("仕入元URL"), cfg) == "B" and "mercari" not in str(r.get("仕入元URL"))   # メルカリは機械で見ない（オーナーの決めごと）
-                     and not str(r.get("最後に仕入元を確認した日時", "")).startswith(today)))]
+                     and (tt.get("フリマも毎回", False) or not str(r.get("最後に仕入元を確認した日時", "")).startswith(today))))]
+    # ↑ 11/26 22:36 オーナー「AとBやって」A：Yahoo!フリマ・ヤフオクも毎回（1日6回）見る（時刻表 在庫の監視 → フリマも毎回 true）
     rows.sort(key=lambda r: r.get("最後に仕入元を確認した日時", ""))   # 長く見ていない品から（メルカリ・Amazon は人が見る）
+    # B：売れた品（受注の通知が入れる 売れたらすぐ見る）を、いちばん先に見る
+    _qp = os.path.join(ROOT, "data", "判定", "売れたらすぐ見る.json")
+    _sold_q = [x for x in load_json(_qp, {"待ち": []}).get("待ち", []) if x]
+    if _sold_q:
+        _first = [r for r in ledger if r["SKU"] in _sold_q and not hand_only(r.get("仕入元URL"))]
+        _fs = {r["SKU"] for r in _first}
+        rows = _first + [r for r in rows if r["SKU"] not in _fs]
     # メルカリなど機械で見ない仕入元は、人が見た答え（data/答え/ の {"種類": "仕入元を見た", "SKU": …, "結果": "ある"|"ない"}）を使う（教科書 第18章）
     import glob, shutil
     human, hfiles = {}, []
@@ -231,7 +270,7 @@ def main():
             if code in (404, 410):
                 gone404.append(r["SKU"])
             if r["状態"] == "売れた" and not ok:
-                accident.append("%s（%s）\n  %s" % (r["SKU"], why, hand_links(r.get("タイトル"))))
+                accident.append("%s（%s）\n  %s%s" % (r["SKU"], why, hand_links(r.get("タイトル")), alt_sources(r)))
             elif r["状態"] == "出品中" and not ok:
                 zero.append(r)
             elif r["状態"] == "在庫ゼロ" and ok:
@@ -239,8 +278,14 @@ def main():
         if r["SKU"] not in human:
             time.sleep(gap)
     save_json(os.path.join(ROOT, "data", "在庫の監視", "読めない回数.json"), unk)
+    if _sold_q:   # 見終わった売れた品は、売れたらすぐ見る の列から外す（メルカリ・ラクマの品は mercari_watch が外す）
+        _seen = set(out["ある"]) | set(out["ない"])
+        _q = load_json(_qp, {"待ち": []})
+        _q["待ち"] = [x for x in _q.get("待ち", []) if x not in _seen]
+        save_json(_qp, _q)
     if accident:   # 事故はすぐ知らせる（第6章）
-        notify("【在庫の監視・事故】売れたのに仕入元に無い：\n" + "\n".join(accident))
+        notify("【在庫の監視・事故】売れたのに仕入元に無い：\n" + "\n".join(accident) +
+               "\n→ キャンセルは取引不良になります。下の代わりの仕入れ先（同じ型番）で買えないか先に見てください。")
     msg = ["【在庫の監視】%s %s：見た %d品（ある %d・ない %d・読めなかった %d）" %
            (jst(), "本番" if live else "ドライラン", len(out["ある"]) + len(out["ない"]) + len(out["読めない"]),
             len(out["ある"]), len(out["ない"]), len(out["読めない"]))]
