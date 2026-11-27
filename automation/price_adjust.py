@@ -7,7 +7,7 @@
 #  時刻表.json の「実行」が false の間はドライラン（eBayは読むだけ。変える案を data/値段の調整/ に書いて知らせる）
 import datetime as dt, json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (ROOT, Ebay, EbayError, err_text, floor_price, profit_yen, num, now, jst, settings, timetable, notify, notify_once_a_day,
+from common import (best_offer_terms, ROOT, Ebay, EbayError, err_text, floor_price, profit_yen, num, now, jst, settings, timetable, notify, notify_once_a_day,
                     read_ledger, save_ledger, is_target, write_run, mark_started, browse_stopped, browse_stop, usual_ok,
                     usual_add, load_json, save_json)
 
@@ -301,11 +301,8 @@ def main():
                         fpv = p.get("最低利益$") or 0
                         o.setdefault("pricingSummary", {})["price"] = {"value": "%.2f" % p["案$"], "currency": "USD"}
                         pol = o.get("listingPolicies") or {}
-                        if fpv and fpv + 0.01 < p["案$"]:
-                            pol["bestOfferTerms"] = {"bestOfferEnabled": True, "autoDeclinePrice": {"value": "%.2f" % fpv, "currency": "USD"},
-                                                     "autoAcceptPrice": {"value": "%.2f" % (fpv + 0.01), "currency": "USD"}}
-                        else:
-                            pol["bestOfferTerms"] = {"bestOfferEnabled": False}
+                        row = next(r for r in rows if r["SKU"] == p["SKU"])
+                        pol["bestOfferTerms"] = best_offer_terms(row, cfg, p["案$"], fp=fpv or None)
                         o["listingPolicies"] = pol
                         for k in ("offerId", "status", "listing"):
                             o.pop(k, None)

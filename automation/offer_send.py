@@ -6,7 +6,7 @@
 - data/判定/オファー.json：{"本番": false}。本番 false はドライラン。結果は data/判定/オファー_結果.json。同じ出品に送るのは7日に1回まで。"""
 import os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import ROOT, Ebay, EbayError, err_text, jst, load_json, save_json, read_ledger, settings, timetable, floor_price, num
+from common import notify, ROOT, Ebay, EbayError, err_text, jst, load_json, save_json, read_ledger, settings, timetable, floor_price, num
 
 P = os.path.join(ROOT, "data", "判定", "オファー.json")
 RP = os.path.join(ROOT, "data", "判定", "オファー_結果.json")
@@ -69,3 +69,6 @@ if live:
     save_json(P, cfg)
 save_json(RP, dict(res, 最後=out))
 print("本番" if live else "ドライラン", "送れる", out["送れる出品"], "予定", len(out["予定"]), "送った", len(out["送った"]), "送らない", len(out["送らない"]), "失敗", len(out["失敗"]))
+L = out["送った"] or out["予定"]
+notify("【ウォッチした人へのオファー】%s %s 送れる出品%d・%s%d品%s\n%s" % (jst(), "本番" if live else "ドライラン（送っていない）", out["送れる出品"], "送った" if live else "送る予定",
+       len(L), ("・失敗%d" % len(out["失敗"])) if out["失敗"] else "", "\n".join("%s %d%%引き $%.2f→$%.2f（フロア $%.2f）" % (p["SKU"], p["値引き"], p["値段"], p["オファーの値段"], p["フロア"]) for p in L[:20])))

@@ -333,6 +333,36 @@ def floor_price(row, cfg):
     return round(max(p1, p2) + 0.005, 2)
 
 
+def price_at_rate(row, cfg, rate):
+    """利益率が rate になる売値（ドル）。値が欠けていれば None。"""
+    f = cfg.get("値付けの式_第5章", {})
+    fx = num(row.get("為替")) or f.get("為替_円per米ドル")
+    fee, duty = pct(row.get("手数料率")), pct(row.get("関税率"))
+    cost, ship = num(row.get("仕入値(円)")), num(row.get("出品時の海外送料(円)"))
+    fixed = (num(row.get("固定費(円)")) or 0) + (num(row.get("国内送料(円)")) or 0)
+    if not fx or fee is None or duty is None or not cost or not ship or 1 - fee - duty - rate <= 0:
+        return None
+    return round((cost + ship + fixed) / (fx * (1 - fee - duty - rate)) + 0.005, 2)
+
+
+def best_offer_terms(row, cfg, price, fp=None, textbook=None):
+    """値下げ交渉の設定（eBay の bestOfferTerms）。
+    教科書の式（第23章・11/28 08:08 オーナー「1と2をやって」）：自動で受ける＝「利益9%の値段」と「売値の99%」の低いほう、自動で断る＝フロア。
+    教科書の式が off のときは前のまま（受ける＝フロア＋$0.01）。フロアが今の値段以上なら交渉を受けない。"""
+    fp = fp if fp is not None else floor_price(row, cfg)
+    if not fp or not price or fp + 0.01 >= price:
+        return {"bestOfferEnabled": False}
+    if textbook is None:
+        textbook = bool(timetable("値下げ交渉の設定").get("教科書の式"))
+    acc = fp + 0.01
+    if textbook:
+        p9 = price_at_rate(row, cfg, cfg.get("値付けの式_第5章", {}).get("自動で受ける_利益率", 0.09))
+        cand = min(x for x in (p9, round(price * 0.99, 2)) if x)
+        acc = max(fp + 0.01, min(cand, price - 0.01))
+    return {"bestOfferEnabled": True, "autoDeclinePrice": {"value": "%.2f" % fp, "currency": "USD"},
+            "autoAcceptPrice": {"value": "%.2f" % acc, "currency": "USD"}}
+
+
 def profit_yen(price, row, cfg):
     f = cfg.get("値付けの式_第5章", {})
     fx = num(row.get("為替")) or f.get("為替_円per米ドル")

@@ -12,7 +12,7 @@
 import collections, json, os, re, statistics, sys, time, urllib.parse
 import title_make
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (hand_only, ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
+from common import (best_offer_terms, hand_only, ROOT, Ebay, EbayError, err_text, now, jst, settings, timetable, notify, read_ledger, save_ledger, write_run,
                     mark_started, load_json, save_json, browse_stopped, browse_stop, listing_limit_stopped, listing_limit_stop, listing_limit_left, listing_limit_spend,
                     is_limit_error)
 from price_adjust import model_of
@@ -328,8 +328,7 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
           "imageUrls": c.get("_photos") or photos_of(c), "quantity": 1, "price": price, "ean": "",
           "policies": {"fulfillment": pol.get("発送", "327189638011"), "payment": pol.get("支払い", "318927569011"),
                        "returns": pol.get("返品", "318925133011")},
-          "bestOffer": {"bestOfferEnabled": True, "autoDeclinePrice": {"value": "%.2f" % fp, "currency": "USD"},
-                        "autoAcceptPrice": {"value": "%.2f" % (fp + 0.01), "currency": "USD"}},
+          "bestOffer": None,
           "pkg": {"weightG": w, "lengthCm": l, "widthCm": wd, "heightCm": h},
           "ledger": {"src": c["url"], "cost": c["price"], "ship": ship, "feeRate": kind.get("手数料率", 0.1742),
                      "dutyRate": kind.get("関税率", 0.15), "fixed": 0, "dom": c.get("dom", 2000), "fx": 152,
@@ -339,8 +338,11 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
              (cn["func"] if cn["func"] else "NOT TESTED - we have not tested this item and its function is not confirmed.") + \
              (" Included: %s." % cn["box"] if cn.get("box") else "") + " Please judge from the photos."
         pl["conditionDescription"] = cd[:1000]
-    if fp >= price:   # フロアの値段で出すときは、値下げの交渉を受けない
-        pl["bestOffer"] = {"bestOfferEnabled": False}
+    # 値下げ交渉：common.best_offer_terms（教科書の式・フロアの値段で出すときは受けない）
+    lg = pl["ledger"]
+    pl["bestOffer"] = best_offer_terms({"為替": lg["fx"], "手数料率": lg["feeRate"], "関税率": lg["dutyRate"], "仕入値(円)": lg["cost"],
+                                               "出品時の海外送料(円)": lg["ship"], "固定費(円)": lg["fixed"], "国内送料(円)": lg["dom"]},
+                                              settings(), price, fp=fp)
     return pl
 
 

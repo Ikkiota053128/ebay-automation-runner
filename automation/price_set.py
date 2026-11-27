@@ -3,13 +3,14 @@
 オファーの値段を変え、値下げ交渉は「フロアが値段より $0.01 以上安いときだけ・フロアで断る」に直す（25016 を避ける）→ 保存 → GetItem で出品の値段を確かめる → 台帳の売値を合わせる。"""
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import ROOT, Ebay, EbayError, err_text, jst, load_json, save_json, read_ledger, save_ledger, num
+from common import best_offer_terms, settings, ROOT, Ebay, EbayError, err_text, jst, load_json, save_json, read_ledger, save_ledger, num
 
 CL = {"Content-Language": "en-US"}
 eb = Ebay()
 want = {x["SKU"]: x for x in load_json(os.path.join(ROOT, "data", "値段の調整", "手で下げる.json"), [])}
 rows = read_ledger()
 out = {"時刻": jst(), "下げた": [], "失敗": []}
+st = settings()
 for r in rows:
     w = want.get(r["SKU"])
     if not w or not r.get("offerId") or r.get("状態") != "出品中":
@@ -26,11 +27,7 @@ for r in rows:
             raise EbayError(0, {"raw": "大きすぎる値下げ（$%.2f → $%.2f）なので止めた" % (old, price)})
         o["pricingSummary"]["price"] = {"value": "%.2f" % price, "currency": "USD"}
         pol = o.get("listingPolicies") or {}
-        if fp + 0.01 < price:
-            pol["bestOfferTerms"] = {"bestOfferEnabled": True, "autoDeclinePrice": {"value": "%.2f" % fp, "currency": "USD"},
-                                     "autoAcceptPrice": {"value": "%.2f" % (fp + 0.01), "currency": "USD"}}
-        else:
-            pol["bestOfferTerms"] = {"bestOfferEnabled": False}
+        pol["bestOfferTerms"] = best_offer_terms(r, st, price, fp=fp)
         o["listingPolicies"] = pol
         for k in ("offerId", "status", "listing"):
             o.pop(k, None)
