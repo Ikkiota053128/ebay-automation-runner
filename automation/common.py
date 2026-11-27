@@ -196,7 +196,11 @@ class Ebay:
         out = {}
         for i in range(0, len(reqs), 25):
             part = reqs[i:i + 25]
-            _, j = self.call("POST", "/sell/inventory/v1/bulk_update_price_quantity", {"requests": part})
+            try:
+                _, j = self.call("POST", "/sell/inventory/v1/bulk_update_price_quantity", {"requests": part})
+            except EbayError as e:   # 11/27：まとめた全部が失敗すると 400 で返る。中の1件ずつの返事を読んで続ける（25016 などは呼んだ側が直す）
+                j = e.body if isinstance(e.body, dict) and e.body.get("responses") else {"responses": [
+                    {"sku": q["sku"], "statusCode": e.status, "errors": [{"message": str(e)[:500]}]} for q in part]}
             got = {r.get("sku"): r for r in j.get("responses", [])}
             for q in part:
                 r = got.get(q["sku"])
