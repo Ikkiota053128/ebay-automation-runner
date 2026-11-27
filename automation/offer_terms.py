@@ -52,6 +52,10 @@ def main():
             continue
         try:
             _, o = eb.call("GET", "/sell/inventory/v1/offer/" + oid)
+            ep = num(((o.get("pricingSummary") or {}).get("price") or {}).get("value"))
+            if ep and abs(ep - price) > 0.005:   # 台帳の売値と eBay の値段がちがうときは eBay の値段で（25016 を避ける）
+                want = best_offer_terms(r, cfg, ep, fp=fp, textbook=True)
+                key = "%s|%.2f|%.2f|%s" % (oid, price, fp, (want.get("autoAcceptPrice") or {}).get("value", "off"))
             pol = o.get("listingPolicies") or {}
             pol["bestOfferTerms"] = want
             o["listingPolicies"] = pol
