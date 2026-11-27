@@ -146,6 +146,11 @@ def same_seller(ph, html, c):
     return [u for u in ph if (SELLER_RX.search(u) or [None, None])[1] == main]
 
 
+# 日本らしい品の目印（11/28 オーナー）：国内向けの品・日本製・国内モデルの型番（セイコー SB…/SA…、カシオ・シチズンの …J/…JF/…JR など）
+JP_ONLY = re.compile(r"国内正規|国内モデル|国内仕様|日本製|日本国内|Made in Japan|MADE IN JAPAN|JDM|逆輸入でない", re.I)
+JP_MODEL = re.compile(r"^(SB[A-Z]{2}\d{3}|SA[A-Z]{2}\d{3})|[-0-9](J|JF|JR|JP|JA)$", re.I)
+
+
 def rk_img(u):
     """楽天の写真のアドレスを、読める形にする（11/25 07:45 オーナー「最近読み取れない商品画像が出品されるのはなぜ？」）。
     元の大きさ（?_ex なし）→ image.rakuten.co.jp の元の写真 → ?_ex=700x700 の順に試し、GET で画像が返ったものを使う。どれもだめなら空"""
@@ -530,7 +535,16 @@ def main():
                 continue
         best[k] = c
     judge.comp_cache_load(os.path.join(ROOT, "data", "判定", "相場の写し.json"), tt.get("相場の使い回し_時間", 6), tt.get("相場の使い回し_競合なし_時間"))   # 11/19 10:32 オーナー「使い回し3日」   # 11/19 8:52 オーナー「おすすめは1から」
-    todo = list(best.values())[: int(tt.get("1回に判定する上限_件", 40))]
+    # 11/28 07:49 オーナー「日本にしかない時計、カメラを中心に出品して！日本らしい商品!」：日本らしい品・時計・カメラを先に判定する
+    def jp_score(c):
+        t = c.get("title") or ""
+        sc = 0
+        if JP_ONLY.search(t) or JP_MODEL.search(c.get("型番") or ""):
+            sc -= 2
+        if re.search(r"腕時計|ウォッチ|watch|時計|カメラ|camera|レンズ|lens|フィルム|一眼|二眼|レンジファインダー", t, re.I):
+            sc -= 1
+        return sc
+    todo = sorted(best.values(), key=lambda c: (not c.get("_approved"), jp_score(c)))[: int(tt.get("1回に判定する上限_件", 40))]
     n_list = int(tt.get("1回の出品の上限_件", 20))
     if live and not tt.get("カナリア済み"):
         n_list = min(n_list, int(tt.get("カナリアの件数", 5)))
@@ -654,6 +668,11 @@ def main():
                                     r.update(結論="エラー", 理由="写真を eBay に上げられない：" + err_text(e)[:300] if isinstance(e, EbayError) else str(e)[:300])
                             if r["結論"] == "GO" and live and never_usd and price > never_usd:
                                 r.update(結論="見送り", 理由="売値 $%.2f が出す上限 $%.0f を超える（11/20 7:44 オーナー「今後は1000以上の商品出品しないで」）" % (price, never_usd))
+                            # 11/28 07:49 オーナー「アメリカで商品がたくさん回ってて、価格競争になりそうな商品はできる限り出品は後回しにして！」
+                            _loc = judge.COMP_LOC.get(judge.norm(c["型番"]), {})
+                            if r["結論"] == "GO" and not c.get("_approved") and not (JP_ONLY.search(c.get("title") or "") or JP_MODEL.search(c.get("型番") or "")) and \
+                                    (_loc.get("数", 0) >= int(tt.get("競合が多い_件", 15)) or _loc.get("米国", 0) >= int(tt.get("米国の競合が多い_件", 3))):
+                                r.update(結論="GO（後回し）", 理由="価格競争になりやすい（同じ型番の競合 %d件・うち米国から %d件）" % (_loc.get("数", 0), _loc.get("米国", 0)))
                             if r["結論"] == "GO" and live and (cap_usd and price > cap_usd or (listing_limit_left() is not None and price > listing_limit_left())):
                                 r.update(結論="GO（後回し）", 理由="今は出さない：%s" % ("高額（$%.0f 超え・11/20 7:46 オーナー「今は高額商品出品控えて」）" % cap_usd if cap_usd and price > cap_usd else "今月の出品の上限の残り $%.2f を超える" % listing_limit_left()))
                             if r["結論"] == "GO" and live and len(listed) < n_list and (not listing_limit_stopped() or (listing_limit_left() or 0) >= price):

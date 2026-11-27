@@ -107,6 +107,7 @@ def cond_of(title_ja):
 
 
 CAT_NAMES = {}   # eBay のカテゴリ番号 → 名前（競合の出品から）
+COMP_LOC = {}   # 型番（norm）→ {"数": 競合の数, "米国": 米国から出している競合の数}（11/28 オーナー「価格競争になりそうな商品は後回し」）
 COMP_TITLES = {}   # 型番（norm）→ 競合のタイトル（11/25：タイトルを競合の仕様の言葉で80文字に近づける）
 
 
@@ -142,6 +143,8 @@ def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
         v = _CC["d"][k]
         if v.get("ti"):
             COMP_TITLES[norm(model)] = list(v["ti"])
+        if v.get("loc"):
+            COMP_LOC[norm(model)] = dict(v["loc"])
         if cats is not None:
             cats.extend(v.get("c", []))
         return list(v["p"])
@@ -151,7 +154,7 @@ def comps(eb, model, cond, me, my_ids, cats=None, cat=None):
         cats.extend(cc)
     if _CC["ttl"]:
         _CC["miss"] += 1
-        _CC["d"][k] = {"t": _t.time(), "p": ps, "c": cc, "ti": COMP_TITLES.get(norm(model), [])[:8]}
+        _CC["d"][k] = {"t": _t.time(), "p": ps, "c": cc, "ti": COMP_TITLES.get(norm(model), [])[:8], "loc": COMP_LOC.get(norm(model), {})}
     return ps
 
 
@@ -176,7 +179,8 @@ def _comps(eb, model, cond, me, my_ids, cats=None, cat=None):
         for cc in it.get("categories") or []:
             if cc.get("categoryId") and cc.get("categoryName"):
                 CAT_NAMES.setdefault(str(cc["categoryId"]), cc["categoryName"])
-        out.append({"p": round(p + (sh or 0), 2), "t": t, "c": str((it.get("leafCategoryIds") or [""])[0])})
+        out.append({"p": round(p + (sh or 0), 2), "t": t, "c": str((it.get("leafCategoryIds") or [""])[0]),
+                    "us": (it.get("itemLocation") or {}).get("country") == "US"})
     kept = clean(out)
     if kept and not cat:
         # 型番で探すと、付属品（フィルム・電池・ノブなど）が本体より多く出ることがある。本体は高いので、
@@ -189,6 +193,7 @@ def _comps(eb, model, cond, me, my_ids, cats=None, cat=None):
     if cats is not None:
         cats.extend(x["c"] for x in kept if x["c"])
     COMP_TITLES[md] = [x["t"] for x in kept][:8]
+    COMP_LOC[md] = {"数": len(kept), "米国": sum(1 for x in kept if x.get("us"))}
     return sorted(x["p"] for x in kept)
 
 
