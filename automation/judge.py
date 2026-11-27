@@ -202,6 +202,22 @@ def floor_price(base, keep, fx, fl_yen, fl_rate):
     return math.ceil(v * 100 - 1e-6) / 100 if math.isfinite(v) else None
 
 
+def textbook_outlier(act0):
+    """11/27 19:54 オーナー「教科書通りに進めて」：外れ値は教科書の決まりだけで外す（店の設定 競合の比較_第5章 → 外れ値_中央値に対してこれ未満は無視：0.35）。
+    中央値の35%より安い品だけを外す。GAS の「真ん中の半分・65%・すぐ上より15%安い」は使わない（本物の安い競合まで外していた）。
+    None を返したら、今までの外し方（店の設定 教科書の外れ値 false のとき）"""
+    from common import settings
+    s = settings()
+    if not (s.get("判定", {}).get("値付け", {}).get("教科書の外れ値", True)):
+        return None
+    r = float((s.get("競合の比較_第5章") or {}).get("外れ値_中央値に対してこれ未満は無視", 0.35))
+    act0 = sorted(x for x in act0 if x > 0)
+    if not act0:
+        return []
+    med = act0[len(act0) // 2]
+    return [x for x in act0 if x >= med * r] or [med]
+
+
 def quote(act0, d, qs):
     """GAS quotePrice_ の②（Active の競合がある場合）。競合が無い品は見送り（GAS の③④は使わない＝相場と比べられない品は出さない）"""
     r2 = lambda x: round(x * 100) / 100
@@ -213,21 +229,23 @@ def quote(act0, d, qs):
     act0 = sorted(x for x in act0 if x > 0)
     if not act0:
         return None, "eBayに同じ型番の競合が無い（相場と比べられない）", fp
-    mid = act0[(len(act0) - 1) // 2] if len(act0) >= 3 else 0
-    act = [x for x in act0 if x >= mid * 0.5] if mid > 0 else act0[:]
-    top = act0[len(act0) // 2:]
-    um = top[(len(top) - 1) // 2] if top else 0
     med = act0[len(act0) // 2]
-    ref = max(um, med)
-    if ref > 0 and act:
-        f = [x for x in act if x >= ref * 0.35]
-        act = f or [med]
-    if len(act0) >= 5:
-        f = [x for x in act if x >= med * 0.65]
-        act = f or [med]
-        dr = 0
-        while len(act) >= 3 and dr < 2 and act[0] < act[1] * 0.85 and act[0] < med * 0.7:
-            act, dr = act[1:], dr + 1
+    act = textbook_outlier(act0)
+    if act is None:
+        mid = act0[(len(act0) - 1) // 2] if len(act0) >= 3 else 0
+        act = [x for x in act0 if x >= mid * 0.5] if mid > 0 else act0[:]
+        top = act0[len(act0) // 2:]
+        um = top[(len(top) - 1) // 2] if top else 0
+        ref = max(um, med)
+        if ref > 0 and act:
+            f = [x for x in act if x >= ref * 0.35]
+            act = f or [med]
+        if len(act0) >= 5:
+            f = [x for x in act if x >= med * 0.65]
+            act = f or [med]
+            dr = 0
+            while len(act) >= 3 and dr < 2 and act[0] < act[1] * 0.85 and act[0] < med * 0.7:
+                act, dr = act[1:], dr + 1
     L = act[0]
     L2 = act[1] if len(act) >= 2 else 0
     target = r2(L * 0.99 if L >= qs["high"] else L - 1)

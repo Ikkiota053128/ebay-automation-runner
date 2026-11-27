@@ -14,6 +14,10 @@ def filt(act0):
     act0 = sorted(x for x in act0 if x > 0)
     if not act0:
         return []
+    import judge
+    _t = judge.textbook_outlier(act0)
+    if _t is not None:
+        return _t
     mid = act0[(len(act0) - 1) // 2] if len(act0) >= 3 else 0
     act = [x for x in act0 if x >= mid * 0.5] if mid > 0 else act0[:]
     top = act0[len(act0) // 2:]

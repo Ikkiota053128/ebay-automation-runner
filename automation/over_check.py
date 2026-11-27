@@ -13,6 +13,10 @@ def market(act0):
     if not act0:
         return None
     med = act0[len(act0) // 2]
+    import judge
+    _t = judge.textbook_outlier(act0)
+    if _t is not None:
+        return {"最安": _t[0], "2番目": _t[1] if len(_t) >= 2 else 0, "真ん中": med, "基準": max(med, (_t[1] if len(_t) >= 2 else 0), _t[0]), "件数": len(act0)}
     mid = act0[(len(act0) - 1) // 2] if len(act0) >= 3 else 0
     act = [x for x in act0 if x >= mid * 0.5] if mid > 0 else act0[:]
     top = act0[len(act0) // 2:]
