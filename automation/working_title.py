@@ -20,6 +20,8 @@ live, cap = bool(cfg.get("本番")), int(cfg.get("件数", 20))
 eb = Ebay()
 rows = [r for r in read_ledger() if r.get("状態") == "出品中" and r.get("offerId") and not r["SKU"].startswith("STK-")]
 ONLY = set(cfg.get("SKU") or [])
+if cfg.get("外す") and not ONLY:
+    ONLY = {"(なし)"}   # 外すだけの回は、入れる品を見ない
 if ONLY:
     rows = [r for r in rows if r["SKU"] in ONLY]
 REP = "Reported working in the Japanese listing (not tested by us)."
@@ -81,15 +83,51 @@ for r in rows:
     except EbayError as e:
         out["失敗"].append(dict(plan, エラー=err_text(e)[:300]))
     time.sleep(0.3)
+# 11/28 11:44 オーナー「案どおりやって」：根拠の無かった品・不具合の書いてある品から Tested Working を外し、説明を Not tested に戻す
+REM = set(cfg.get("外す") or [])
+NT_DESC, NT_COND = "Not tested. Please check the photos.", "NOT TESTED - we have not tested this item and its function is not confirmed."
+out["外した"] = []
+for r in [x for x in read_ledger() if x["SKU"] in REM and x.get("offerId")] if live else []:
+    sku = r["SKU"]
+    try:
+        it = eb.inventory_item(sku)
+        p = it.get("product") or {}
+        old = p.get("title") or ""
+        p["title"] = re.sub(r"\s+", " ", re.sub(r"\bTested Working\b|\bTested\b", "", old)).strip()
+        if it.get("conditionDescription"):
+            it["conditionDescription"] = it["conditionDescription"].replace(REP, NT_COND)
+        body = {k: v for k, v in it.items() if k in ("product", "condition", "conditionDescription", "conditionDescriptors", "availability", "packageWeightAndSize", "locale")}
+        pw = body.get("packageWeightAndSize") or {}
+        if pw and not float((pw.get("weight") or {}).get("value") or 0) > 0:
+            pw.pop("weight", None)
+            if not pw.get("dimensions") or not all(float(pw["dimensions"].get(k) or 0) > 0 for k in ("length", "width", "height")):
+                body.pop("packageWeightAndSize", None)
+        eb.call("PUT", "/sell/inventory/v1/inventory_item/" + urllib.parse.quote(sku, safe=""), body, headers=CL)
+        o = [x for x in eb.offers_of(sku) if x.get("offerId") == r["offerId"]]
+        if o and REP in (o[0].get("listingDescription") or ""):
+            of = dict(o[0])
+            of["listingDescription"] = of["listingDescription"].replace(REP, NT_DESC)
+            for k in ("offerId", "status", "listing"):
+                of.pop(k, None)
+            eb.call("PUT", "/sell/inventory/v1/offer/" + r["offerId"], of, headers=CL)
+        if re.search(r"\bTested\b", (eb.inventory_item(sku).get("product") or {}).get("title") or ""):
+            raise EbayError(0, {"raw": "読み直したら Tested が残っている"})
+        r["タイトル"] = p["title"]
+        changed.append(r)
+        out["外した"].append({"SKU": sku, "前": old, "後": p["title"]})
+    except EbayError as e:
+        out["失敗"].append({"SKU": sku, "エラー": err_text(e)[:300]})
 if changed:
     save_ledger(changed, ["タイトル"], "動作確認のタイトル")
 if live:
     cfg["本番"] = False
     cfg.pop("SKU", None)
+    cfg.pop("外す", None)
     save_json(P, cfg)
 save_json(RP, out)
 msg = "【動作確認済みのタイトル】%s %s：見た%d品・仕入れ先が動作確認済み %d品（Tested Working 入っている %d・入っていない %d）%s" % (
     jst(), "本番" if live else "ドライラン", out["見た"], out["動作確認済み"], out["入っている"], out["入っていない"],
     ("・直した %d・失敗 %d" % (len(out["直した"]), len(out["失敗"]))) if live else "")
+msg += "・外した %d" % len(out.get("外した", []))
 print(msg)
 notify(msg)
