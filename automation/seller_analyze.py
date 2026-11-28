@@ -8,6 +8,7 @@ from common import ROOT, Ebay, EbayError, err_text, jst, load_json, save_json, n
 import flea_sweep as fs
 from flea_sweep import gas_get_models
 from model_grow import mkey
+from price_adjust import JUNK, BOOK, ACC
 
 SELLER = (sys.argv[1] if len(sys.argv) > 1 else "s.kojiro")
 CATS = {"625": "カメラ", "14324": "腕時計・宝飾", "293": "家電・オーディオ", "619": "楽器", "1492": "釣り"}
@@ -67,7 +68,10 @@ for k in keys[:100]:
     except EbayError as e:
         print("browse", err_text(e)[:120])
         break
-    comp = [c for c in cs if k in mkey(c.get("title")) and (c.get("seller") or {}).get("username", "").lower() not in (SELLER.lower(), "ihdj_81")]
+    mp0 = tot(mine)[0]
+    comp = [c for c in cs if k in mkey(c.get("title")) and (c.get("seller") or {}).get("username", "").lower() not in (SELLER.lower(), "ihdj_81")
+            and not (JUNK.search(c.get("title") or "") or ACC.search(c.get("title") or "") or BOOK.search(c.get("title") or ""))
+            and tot(c)[0] >= mp0 * 0.25 and re.search(r"camera|watch|reel|lens|cyber|coolpix|powershot|ixy|finepix|lumix", c.get("title") or "", re.I)]   # 本体だけ（電池・充電器・ケース・部品を外す）
     us = sum(1 for c in comp if (c.get("itemLocation") or {}).get("country") == "US")
     jp = sum(1 for c in comp if (c.get("itemLocation") or {}).get("country") == "JP")
     mp = tot(mine)[0]
