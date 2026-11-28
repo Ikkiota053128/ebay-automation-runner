@@ -16,7 +16,7 @@ from common import ROOT, Ebay, EbayError, err_text, jst, load_json, save_json, r
 CL = {"Content-Language": "en-US"}
 P = os.path.join(ROOT, "data", "判定", "タイトルを埋める.json")
 RP = os.path.join(ROOT, "data", "判定", "タイトルを埋める_結果.json")
-TAIL = re.compile(r"^(.+?) ((?:New|Used|Near Mint|Excellent|Good|Fair|For Parts)(?: w/ \S+| Body Only)* From Japan)$")
+TAIL = re.compile(r"^(.+?) ((?:Tested Working )?(?:New|Used|Near Mint|Excellent|Good|Fair|For Parts)(?: w/ \S+| Body Only)* From Japan)$")   # 11/28：Tested Working は状態と一緒に残す
 SERIES_JP = [("グランドセイコー", "Grand Seiko"), ("アルバ", "Alba"), ("ルキア", "Lukia"), ("プレサージュ", "Presage"), ("プロスペックス", "Prospex"),
              ("ブライツ", "Brightz"), ("ドルチェ", "Dolce"), ("エクセリーヌ", "Exceline"), ("アストロン", "Astron"), ("クレドール", "Credor"),
              ("ティセ", "Tissé"), ("ワイアード", "Wired"), ("オシアナス", "Oceanus"), ("プロトレック", "Pro Trek"), ("エディフィス", "Edifice"),

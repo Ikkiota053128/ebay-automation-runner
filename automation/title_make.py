@@ -86,3 +86,30 @@ def colors_in(t):
     found = {en for rx, en in COLORS if re.search(rx, t)}
     found |= {en for _, en in COLORS if re.search(r"\b%s\b" % en, t, re.I)}
     return found
+
+
+# 11/28 09:27 オーナー「仕入先で動作確認済みの商品は出品タイトルに必ず動作確認済みときさいして！」
+# 仕入れ先が「動作確認済み」と書いた品（cond_note の func が Reported working）は、タイトルの状態の前に「Tested Working」を必ず入れる。
+# 80文字を超えるときは、型番より後ろの特徴の言葉を後ろから外して入れる（ブランド・型番・状態・From Japan は残す）。
+WORK = "Tested Working"
+_TAILW = re.compile(r"^(.+?) ((?:New|Used|Near Mint|Excellent|Good|Fair)(?: w/ \S+| Body Only)* From Japan)$")
+
+
+def is_working(cn, src_name=""):
+    return bool((cn or {}).get("func", "").startswith("Reported working")) and not re.search(r"ジャンク|部品取り|動作未確認|動作不良|故障", src_name or "")
+
+
+def add_working(title):
+    t = re.sub(r"\s+", " ", title or "").strip()
+    if re.search(r"\btested\b|\bworking\b", t, re.I):
+        return t
+    m = _TAILW.match(t)
+    if m:
+        head, tail = m.group(1).split(" "), m.group(2)
+    elif t.endswith(" From Japan"):
+        head, tail = t[:-len(" From Japan")].split(" "), "From Japan"
+    else:
+        head, tail = t.split(" "), ""
+    while len(" ".join(head + [WORK] + ([tail] if tail else []))) > 80 and len(head) > 2:
+        head.pop()
+    return " ".join(head + [WORK] + ([tail] if tail else []))[:80]

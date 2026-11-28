@@ -279,6 +279,8 @@ def make_payload(c, kind, cat, cond, price, fp, ship, sku):
         # 11/23 20:40：状態と付属品は仕入れ先の「商品名」だけから（店のページの説明にはランクの一覧表や「ジャンク」の案内があり、まちがえる）
         nm = c.get("title", "")
         title = title_make.build(brand, model, kind["言葉"], cond, cond_note.notes("", nm), nm)
+        if cond >= 3000 and title_make.is_working(cn, nm):   # 11/28 09:27 オーナー：仕入れ先が動作確認済みなら必ず Tested Working
+            title = title_make.add_working(title)
     func = "New item." if cond < 3000 else (cn["func"] or "Not tested. Please check the photos.")
     nts = [] if cond < 3000 else cn["notes"]
     def esc(x):
