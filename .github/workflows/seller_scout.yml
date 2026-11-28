@@ -1,8 +1,10 @@
-# お手本セラーの型番を集める（手で動かす）
+# お手本セラーの型番を集める（毎週月曜 日本時間 4:37。cron は UTC）
 # 公開リポジトリ：プログラムだけ。台帳・記録・設定は非公開のデータ置き場（ebay-automation）を読み書きする。
 # 公開のログには件数も品名も出さない（中身は data/ログ/ に保存して、データ置き場へ）
 name: お手本セラー
 on:
+  schedule:
+    - cron: "37 19 * * 0"
   workflow_dispatch:
 permissions:
   contents: read

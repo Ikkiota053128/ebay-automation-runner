@@ -110,6 +110,9 @@ def main():
     out["見送り"] = dict(out["見送り"])
     if live and out["足す"]:
         save_json(ADD_P, add + out["足す"])
+        # 足した型番は、店の地引網が次の回に先頭で見る（data/店の地引網/先に見る.json）
+        pp = os.path.join(ROOT, "data", "店の地引網", "先に見る.json")
+        save_json(pp, list(dict.fromkeys(load_json(pp, []) + [a["model"] for a in out["足す"]])))
         cfg["最後に足した"] = jst()
         save_json(CFG_P, cfg)
     save_json(OUT_P, out)

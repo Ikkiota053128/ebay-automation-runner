@@ -147,6 +147,8 @@ def same_seller(ph, html, c):
 
 
 # 日本らしい品の目印（11/28 オーナー）：国内向けの品・日本製・国内モデルの型番（セイコー SB…/SA…、カシオ・シチズンの …J/…JF/…JR など）
+DIGI = re.compile(r"デジタルカメラ|デジカメ|コンパクトカメラ|コンデジ|ミラーレス|Cyber-?shot|COOLPIX|IXY|PowerShot|FinePix|LUMIX|EXILIM|CAMEDIA|Optio|Caplio|digital camera", re.I)
+WORKING = re.compile(r"動作確認済|動作品|動作良好|完動|通電・?動作確認|テスト済|tested", re.I)
 JP_ONLY = re.compile(r"国内正規|国内モデル|国内仕様|日本製|日本国内|Made in Japan|MADE IN JAPAN|JDM|逆輸入でない", re.I)
 JP_MODEL = re.compile(r"^(SB[A-Z]{2}\d{3}|SA[A-Z]{2}\d{3})|[-0-9](J|JF|JR|JP|JA)$", re.I)
 
@@ -538,6 +540,8 @@ def main():
         best[k] = c
     judge.comp_cache_load(os.path.join(ROOT, "data", "判定", "相場の写し.json"), tt.get("相場の使い回し_時間", 6), tt.get("相場の使い回し_競合なし_時間"))   # 11/19 10:32 オーナー「使い回し3日」   # 11/19 8:52 オーナー「おすすめは1から」
     # 11/28 07:49 オーナー「日本にしかない時計、カメラを中心に出品して！日本らしい商品!」：日本らしい品・時計・カメラを先に判定する
+    SELLER_MODELS = {mkey(a.get("model")) for a in load_json(os.path.join(ROOT, "data", "型番リスト", "追加.json"), []) if "お手本セラー" in str(a.get("なぜ"))}
+
     def jp_score(c):
         t = c.get("title") or ""
         sc = 0
@@ -545,6 +549,11 @@ def main():
             sc -= 2
         if re.search(r"腕時計|ウォッチ|watch|時計|カメラ|camera|レンズ|lens|フィルム|一眼|二眼|レンジファインダー", t, re.I):
             sc -= 1
+        # 11/28 09:13 オーナー「今後この人の出品真似して！デジタルカメラ中心に出品して！動作確認済みの商品を多めに出品がベスト！」
+        if DIGI.search(t) or mkey(c.get("型番") or "") in SELLER_MODELS:
+            sc -= 4
+        if WORKING.search(t + " " + str(c.get("desc") or "")):
+            sc -= 2
         return sc
     todo = sorted(best.values(), key=lambda c: (not c.get("_approved"), jp_score(c)))[: int(tt.get("1回に判定する上限_件", 40))]
     n_list = int(tt.get("1回の出品の上限_件", 20))
