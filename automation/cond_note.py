@@ -18,6 +18,42 @@ def _absent(rx, t):
     return re.search("(?:%s)%s" % (rx, NEG), t) is not None
 
 
+# 11/28 11:49 オーナー「見分けも直して」：動作確認済みの見分けを厳しくする（根拠の読み直しで見つかったまちがいの形）
+WORK_RX = re.compile(r"動作確認済|動作品|正常に動作|動作OK|動作ok|動作良好|作動確認済|作動品|動作確認しております|動作を確認|ことを確認済")
+# ① 関連キーワード・検索用・ハッシュタグの中の言葉は数えない
+SEO_RX = re.compile(r"(関連キーワード|検索用|検索ワード|キーワード[:：]|#\S*動作)")
+# ② 付属品のことを言っている（例：動作確認済みの互換バッテリー・電池ケース（動作確認済））
+ACC_AFTER = re.compile(r"^(?:済み?|済|み)?\s*(?:の|な)\s*(?:互換|純正)?\s*(?:バッテリー|電池|充電器|アダプタ|ケーブル|リモコン|イヤホン|ケース|ストラップ|レンズ|フラッシュ)")
+ACC_BEFORE = re.compile(r"(?:バッテリー|電池|充電器|アダプタ|ケーブル|リモコン|イヤホン|ケース|ストラップ)\s*[（(]?\s*$")
+# ③ 質問の文（買い手のコメントなど）
+QUESTION = re.compile(r"(でしょうか|ますか|ですか|[？?])")
+# ④ 同じ文か近くに書いてある不具合（打ち消しの「なし・ありません」は数えない）
+DEFECT_RX = re.compile(r"(異常|エラー|異音|ピントが合[いわ]ない|ピントが合いません|ノイズ|クモリ|曇り|白っぽ|戻りが悪|液晶.{0,4}劣化|画面.{0,2}劣化|(?<!があった場合は)不具合(?!があった|の場合|が(?:ございましたら|あれば))|難あり|難有|【難】|\s難\s|電源が落ち|ツメがな|反応しない|反応が悪|映らない|写らない|カビ|故障|ガリ|音が出ない|動かない|止まる|表示不良|表示しません|通電しません)")
+NEG_RX = re.compile(r"^.{0,14}?(なし|無し|なく|ありません|見受けられません|見当たりません|ない|見られません|ございません|ゼロ|はなく|もなく)")
+
+
+def working_ok(t):
+    """仕入れ先が本当に「この品が動く」と書いているか。言葉があっても、①〜④に当たるものは数えない。1つも残らなければ False"""
+    t = t or ""
+    seo = SEO_RX.search(t)
+    for m in WORK_RX.finditer(t):
+        if seo and m.start() > seo.start():
+            continue   # ①
+        if ACC_AFTER.match(t[m.end():m.end() + 14]) or ACC_BEFORE.search(t[max(0, m.start() - 14):m.start()]):
+            continue   # ②
+        a = max(t.rfind("。", 0, m.start()), t.rfind("\n", 0, m.start()), t.rfind(" / ", 0, m.start()))
+        e = [x for x in (t.find("。", m.end()), t.find("\n", m.end())) if x >= 0]
+        sent = t[a + 1:(min(e) if e else m.end() + 80)]
+        if QUESTION.search(sent):
+            continue   # ③
+        near = t[max(0, m.start() - 60):m.end() + 160]
+        bad = [d for d in DEFECT_RX.finditer(near) if not NEG_RX.match(near[d.end():d.end() + 16])]
+        if bad:
+            return False   # ④ 動作確認済みでも、不具合が書いてある品は「動作確認済み」と言わない
+        return True
+    return False
+
+
 def source_text(c, timeout_ok=True):
     """仕入れ先の説明文（無ければ ""）。失敗しても出品は止めない"""
     url = str(c.get("url", ""))
@@ -89,7 +125,7 @@ def notes(text, title=""):
     func = ""
     if _has(r"ジャンク|動作未確認|動作不良|故障|部品取り", t):
         func = "Not tested / not guaranteed. Please check the photos."
-    elif _has(r"動作確認済|動作品|正常に動作|動作OK|動作ok|動作良好|作動確認済|作動品", t):
+    elif working_ok(t):
         func = "Reported working in the Japanese listing (not tested by us)."
     if _has(r"電池切れ|電池交換", t):
         out.append("Battery may need replacement")
