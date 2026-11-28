@@ -26,7 +26,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BRAND_JA = {"カシオ": "Casio", "ソニー": "Sony", "シチズン": "Citizen", "セイコー": "Seiko", "キヤノン": "Canon", "キャノン": "Canon",
             "ニコン": "Nikon", "オリンパス": "Olympus", "ペンタックス": "Pentax", "パナソニック": "Panasonic", "富士フイルム": "Fujifilm",
             "フジフイルム": "Fujifilm", "リコー": "Ricoh", "ボス": "BOSS", "ローランド": "Roland", "ヤマハ": "Yamaha", "シマノ": "Shimano",
-            "ダイワ": "Daiwa", "タムロン": "Tamron", "シグマ": "Sigma", "オーディオテクニカ": "Audio-Technica", "デノン": "Denon"}
+            "ダイワ": "Daiwa", "タムロン": "Tamron", "シグマ": "Sigma", "オーディオテクニカ": "Audio-Technica", "デノン": "Denon",
+            # 11/28：タイトルにカタカナのブランドが残った（アルパイン MRV-F304）ので足した
+            "アルパイン": "Alpine", "ケンウッド": "Kenwood", "パイオニア": "Pioneer", "カロッツェリア": "Carrozzeria", "コルグ": "Korg",
+            "テクニクス": "Technics", "オンキヨー": "Onkyo", "オンキョー": "Onkyo", "ケンコー": "Kenko", "コニカ": "Konica", "ミノルタ": "Minolta",
+            "マミヤ": "Mamiya", "コンタックス": "Contax", "ライカ": "Leica", "オメガ": "Omega", "ティアック": "TEAC", "アイワ": "Aiwa",
+            "ビクター": "Victor", "シャープ": "Sharp", "東芝": "Toshiba", "日立": "Hitachi", "三菱": "Mitsubishi", "マクセル": "Maxell",
+            "アイバニーズ": "Ibanez", "ズーム": "Zoom", "エレクトロハーモニクス": "Electro-Harmonix", "アブガルシア": "Abu Garcia",
+            "グランドセイコー": "Grand Seiko", "オリエント": "Orient", "ハミルトン": "Hamilton", "ティソ": "Tissot", "ゼンハイザー": "Sennheiser",
+            "トキナー": "Tokina", "ニッシン": "Nissin", "ジーショック": "Casio", "ルミックス": "Panasonic", "エプソン": "Epson"}
 KEEP_CAPS = {"BOSS", "MXR", "TEAC", "AKAI", "JVC", "TDK", "SMC", "EHX"}
 NO_GAS = ("ラクマ", "Amazon")   # 11/24 09:45 オーナー「絶対Amazon，楽天ラクマ全ての工程GAS使わないで！」
 COND_DESC = "Used. NOT TESTED - we have not tested this item and its function is not confirmed. Please judge from the photos."
@@ -36,6 +44,8 @@ def brand_of(maker):
     m = str(maker or "").strip()
     if m in BRAND_JA:
         return BRAND_JA[m]
+    if re.search(r"[ぁ-んァ-ヶー一-龥]", m):   # 日本語のブランド名はタイトルに入れない（英語が分からなければ出さない）
+        raise RuntimeError("ブランド名が日本語のまま（%s）・英語の名前が分からない" % m)
     if m.upper() in KEEP_CAPS:
         return m.upper()
     return m[:1].upper() + m[1:].lower() if m.isupper() or m.islower() else m
