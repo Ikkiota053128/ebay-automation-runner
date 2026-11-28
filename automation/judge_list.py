@@ -147,6 +147,12 @@ def same_seller(ph, html, c):
 
 
 # 日本らしい品の目印（11/28 オーナー）：国内向けの品・日本製・国内モデルの型番（セイコー SB…/SA…、カシオ・シチズンの …J/…JF/…JR など）
+# 11/28 10:44 オーナー「デカ重そうな商品出品やめて」：カーオーディオ・アンプ・スピーカー・据え置きの CD/レコード/デッキ・コンポ・大きい鍵盤
+HEAVY = re.compile(r"カーオーディオ|カーナビ|カーステ|カーアンプ|パワーアンプ|プリメイン|アンプ|スピーカー|サブウーファー|ウーファー|ウーハー|レコードプレーヤー|ターンテーブル|"
+                   r"カセットデッキ|デッキ|コンポ|レシーバー|チューナー|CDプレーヤー|CDプレイヤー|DVDプレーヤー|ブルーレイ|シンセサイザー|キーボード|電子ピアノ|ミキサー|"
+                   r"1DIN|2DIN|１DIN|２DIN|car audio|amplifier|subwoofer|speakers?\b|turntable|receiver|cassette deck|synthesizer|keyboard", re.I)
+LIGHT = re.compile(r"ポータブル|ウォークマン|walkman|portable|ヘッドホンアンプ|ポタアン|イヤホン|ヘッドホン|ミニキーボード|volca|リズムマシン|エフェクター|ペダル|"
+                   r"ワイヤレススピーカー|bluetoothスピーカー|ポケット|小型|カメラ|レンズ|時計", re.I)
 DIGI = re.compile(r"デジタルカメラ|デジカメ|コンパクトカメラ|コンデジ|ミラーレス|Cyber-?shot|COOLPIX|IXY|PowerShot|FinePix|LUMIX|EXILIM|CAMEDIA|Optio|Caplio|digital camera", re.I)
 WORKING = re.compile(r"動作確認済|動作品|動作良好|完動|通電・?動作確認|テスト済|tested", re.I)
 JP_ONLY = re.compile(r"国内正規|国内モデル|国内仕様|日本製|日本国内|Made in Japan|MADE IN JAPAN|JDM|逆輸入でない", re.I)
@@ -573,6 +579,8 @@ def main():
             r.update(結論="見送り", 理由="店の規約で使わない店（転売の購入を断る・転載の禁止）")
         elif judge.RULE_OUT.search(judge.plain(c["title"])) or judge.RULE_OUT.search(c["型番"]):
             r.update(結論="見送り", 理由="キャラクター・ゲーム・限定品（決めごとA）")
+        elif tt.get("大きい重い品を出さない", True) and HEAVY.search(c["title"] or "") and not LIGHT.search(c["title"] or ""):
+            r.update(結論="見送り", 理由="大きい・重い品（11/28 10:44 オーナー「デカ重そうな商品出品やめて」）")
         elif ip_bad(c["title"]):
             r.update(結論="見送り", 理由="規約のリスクの言葉（%s）" % ip_bad(c["title"]))
         elif judge.is_acc_ja(c["title"], c["型番"]):
