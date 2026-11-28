@@ -36,6 +36,8 @@ def main():
     allm = list(gas.get("models") or []) + add
     fs.MAKERS.update(str(m.get("maker", "")).strip().upper() for m in allm if len(str(m.get("maker", "")).strip()) >= 3)
     have = {mkey(m.get("model")) for m in allm}
+    global KNOWN
+    KNOWN = set(fs.MAKERS)
     out = {"時刻": jst(), "本番": live, "セラー": {}, "足す": [], "見送り": collections.Counter()}
     found = {}
     for s in cfg.get("セラー", []):
@@ -66,15 +68,22 @@ def main():
                     if price < mn:
                         out["見送り"]["$%d 未満" % mn] += 1
                         continue
-                    g = fs.guess_model(t)
-                    new_maker = False
+                    if re.search(r"\b(laptop|notebook|let's note|tablet|ipad|monitor|printer)\b", t, re.I):
+                        out["見送り"]["パソコン・タブレットなど（店の種類でない）"] += 1
+                        continue
+                    # メーカーは商品名の頭の英字を先に（OLYMPUS … ZOOM のように後ろの言葉をメーカーにしない）
+                    w = re.match(r"^([A-Za-z][A-Za-z\-]{2,})\s", t)
+                    head = w.group(1).upper() if w else None
+                    new_maker = bool(head) and head not in KNOWN
+                    g = None
+                    if head:
+                        saved = set(fs.MAKERS)
+                        fs.MAKERS.clear(); fs.MAKERS.add(head)
+                        g = fs.guess_model(t)
+                        fs.MAKERS.clear(); fs.MAKERS.update(saved)
                     if not g:
-                        w = re.match(r"^([A-Za-z][A-Za-z\-]{2,})\s", t)
-                        if w:
-                            fs.MAKERS.add(w.group(1).upper())
-                            g = fs.guess_model(t)
-                            fs.MAKERS.discard(w.group(1).upper())
-                            new_maker = bool(g)
+                        g = fs.guess_model(t)
+                        new_maker = False
                     if not g:
                         out["見送り"]["型番が読めない"] += 1
                         continue
@@ -93,6 +102,7 @@ def main():
                 if len(its) < 200:
                     break
         out["セラー"][name] = {"出品中を読んだ": n_items}
+    out["見つけた型番"] = len(found)
     picks = sorted(found.values(), key=lambda f: -statistics.median(f["値段"]))[:cap]
     for f in picks:
         out["足す"].append({"maker": f["maker"], "model": f["model"], "n": len(f["値段"]), "med": round(statistics.median(f["値段"]), 2), "例": f["例"],
