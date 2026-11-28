@@ -683,7 +683,8 @@ def main():
                                 r.update(結論="見送り", 理由="売値 $%.2f が出す上限 $%.0f を超える（11/20 7:44 オーナー「今後は1000以上の商品出品しないで」）" % (price, never_usd))
                             # 11/28 07:49 オーナー「アメリカで商品がたくさん回ってて、価格競争になりそうな商品はできる限り出品は後回しにして！」
                             _loc = judge.COMP_LOC.get(judge.norm(c["型番"]), {})
-                            if r["結論"] == "GO" and not c.get("_approved") and not (JP_ONLY.search(c.get("title") or "") or JP_MODEL.search(c.get("型番") or "")) and \
+                            # 11/28 09:34 オーナー「アメリカで回っている品もどんどん出品して！戦略は日本」：時刻表 競合が多い品を後回し false で止める
+                            if r["結論"] == "GO" and tt.get("競合が多い品を後回し", True) and not c.get("_approved") and not (JP_ONLY.search(c.get("title") or "") or JP_MODEL.search(c.get("型番") or "")) and \
                                     (_loc.get("数", 0) >= int(tt.get("競合が多い_件", 15)) or _loc.get("米国", 0) >= int(tt.get("米国の競合が多い_件", 3))):
                                 r.update(結論="GO（後回し）", 理由="価格競争になりやすい（同じ型番の競合 %d件・うち米国から %d件）" % (_loc.get("数", 0), _loc.get("米国", 0)))
                             if r["結論"] == "GO" and live and (cap_usd and price > cap_usd or (listing_limit_left() is not None and price > listing_limit_left())):

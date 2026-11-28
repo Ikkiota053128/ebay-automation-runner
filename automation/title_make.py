@@ -99,7 +99,13 @@ def is_working(cn, src_name=""):
     return bool((cn or {}).get("func", "").startswith("Reported working")) and not re.search(r"ジャンク|部品取り|動作未確認|動作不良|故障", src_name or "")
 
 
+KEEP = re.compile(r"(?i)^(watch|watches|camera|cameras|lens|player|walkman|minidisc|recorder|pedal|effects?|reel|headphones?|earphones?|synthesizer|"
+                  r"amplifier|amp|camcorder|speakers?|calculator|radio|receiver|turntable|keyboard|guitar|bass|mixer|microphone|binoculars|"
+                  r"film|digital|compact|mirrorless|slr|dslr|chronograph|automatic|quartz|solar|macro)$")
+
+
 def add_working(title):
+    """状態の前に Tested Working（入らなければ Tested）。長いときは、種類の言葉（Watch・Camera など）を残して、特徴の言葉を後ろから外す"""
     t = re.sub(r"\s+", " ", title or "").strip()
     if re.search(r"\btested\b|\bworking\b", t, re.I):
         return t
@@ -110,6 +116,14 @@ def add_working(title):
         head, tail = t[:-len(" From Japan")].split(" "), "From Japan"
     else:
         head, tail = t.split(" "), ""
-    while len(" ".join(head + [WORK] + ([tail] if tail else []))) > 80 and len(head) > 2:
-        head.pop()
-    return " ".join(head + [WORK] + ([tail] if tail else []))[:80]
+    for w in (WORK, "Tested"):
+        h = list(head)
+        while len(" ".join(h + [w] + ([tail] if tail else []))) > 80:
+            idx = next((i for i in range(len(h) - 1, 1, -1) if not KEEP.match(h[i])), None)
+            if idx is None:
+                break
+            h.pop(idx)
+        out = " ".join(h + [w] + ([tail] if tail else []))
+        if len(out) <= 80:
+            return out
+    return out[:80]
